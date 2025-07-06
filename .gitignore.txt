@@ -1,0 +1,19 @@
+# Python virtual environment
+lexibot_env/
+
+# Chroma DB (can be large and is generated from source PDFs)
+chroma_db/
+
+# Ollama models (downloaded separately)
+# Ollama manages its own models, no need to track them here.
+
+# Python compiled files
+__pycache__/
+*.pyc
+
+# Operating System files
+.DS_Store # macOS
+Thumbs.db # Windows
+
+# Environment variables file (if you create one later)
+.env
