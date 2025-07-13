@@ -34,22 +34,22 @@ def handle_document_filling(template_key):
     """
     template_filename = DOCUMENT_TEMPLATES.get(template_key)
     if not template_filename:
-        print(f"LexiBot: Error: No template found for '{template_key}'.")
+        print(f"Aleks: Error: No template found for '{template_key}'.")
         return
 
     template_path = os.path.join(TEMPLATE_DIR, template_filename)
 
     if not os.path.exists(template_path):
-        print(f"LexiBot: Error: Template file '{template_filename}' not found at '{template_path}'.")
+        print(f"Aleks: Error: Template file '{template_filename}' not found at '{template_path}'.")
         return
 
-    print(f"\nLexiBot: Okay, let's fill out your '{template_key}' template.")
+    print(f"\nAleks: Okay, let's fill out your '{template_key}' template.")
     
     try:
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
     except Exception as e:
-        print(f"LexiBot: Error reading template file: {e}")
+        print(f"Aleks: Error reading template file: {e}")
         return
 
     placeholders = set(re.findall(r'\[(.*?)\]|\{\{(.*?)\}\}', template_content))
@@ -59,15 +59,15 @@ def handle_document_filling(template_key):
         placeholders.remove('current_date') # 'current_date' is handled automatically
 
     filled_data = {}
-    print("\nLexiBot: Please provide the following details:")
+    print("\nAleks: Please provide the following details:")
 
     if 'current_date' in template_content:
         filled_data['current_date'] = datetime.now().strftime("%B %d, %Y")
-        print(f"LexiBot: Setting current date to: {filled_data['current_date']}")
+        print(f"Aleks: Setting current date to: {filled_data['current_date']}")
 
     for placeholder in sorted(list(placeholders)):
         description = PLACEHOLDER_DESCRIPTIONS.get(placeholder, placeholder.replace('_', ' ').title())
-        user_input = input(f"LexiBot: {description}: ") # Use description in prompt
+        user_input = input(f"Aleks: {description}: ") # Use description in prompt
         filled_data[placeholder] = user_input
 
     filled_document = template_content
@@ -75,26 +75,26 @@ def handle_document_filling(template_key):
         filled_document = re.sub(rf"\[{re.escape(placeholder)}\]|" + r"\{\{" + re.escape(placeholder) + r"\}\}", value, filled_document)
 
     print("\n" + "="*50)
-    print("LexiBot: Here is your filled document preview:")
+    print("Aleks: Here is your filled document preview:")
     print("="*50)
     print(filled_document)
     print("="*50 + "\n")
 
-    print("LexiBot: Please review the document carefully.")
-    review_correct = input("LexiBot: Is everything correct? (yes/no): ").strip().lower()
+    print("Aleks: Please review the document carefully.")
+    review_correct = input("Aleks: Is everything correct? (yes/no): ").strip().lower()
 
     if review_correct == 'yes':
-        print("LexiBot: Great! The document is finalized.")
+        print("Aleks: Great! The document is finalized.")
         output_filename = f"filled_{template_key}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         # Output saved in the same TEMPLATE_DIR for now, could be changed to an 'output' folder
         output_path = os.path.join(TEMPLATE_DIR, output_filename)
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(filled_document)
-            print(f"LexiBot: Document saved as '{output_filename}' in the '{TEMPLATE_DIR}' folder.")
-            print("LexiBot: (Mock process for sending to government agency complete.)")
+            print(f"Aleks: Document saved as '{output_filename}' in the '{TEMPLATE_DIR}' folder.")
+            print("Aleks: (Mock process for sending to government agency complete.)")
         except Exception as e:
-            print(f"LexiBot: Error saving document: {e}")
+            print(f"Aleks: Error saving document: {e}")
     else:
-        print("LexiBot: Okay, please indicate what needs to be changed for future improvements.")
-        print("LexiBot: For now, you can manually edit the content from the preview above.")
+        print("Aleks: Okay, please indicate what needs to be changed for future improvements.")
+        print("Aleks: For now, you can manually edit the content from the preview above.")
