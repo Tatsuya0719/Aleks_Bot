@@ -1,6 +1,7 @@
 # vector_db_creator.py
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+
 from data_processor import load_and_process_legal_data # Import your data processing function
 import os
 
@@ -9,9 +10,6 @@ def create_and_persist_vector_db(chunks, db_directory="./chroma_db"):
     Creates a ChromaDB vector store from document chunks and persists it to disk.
     """
     print("Loading embedding model...")
-    # Choose a multilingual embedding model. These are downloaded on first run.
-    # "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2" is good for multiple languages.
-    # "sentence-transformers/all-MiniLM-L6-v2" is smaller and faster, but less multilingual.
     embeddings_model_name = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
 
@@ -24,8 +22,7 @@ def create_and_persist_vector_db(chunks, db_directory="./chroma_db"):
         persist_directory=db_directory
     )
 
-    # Explicitly persist the database. This saves it to disk.
-    vectorstore.persist()
+    # REMOVED: vectorstore.persist() - It's no longer needed in newer versions of langchain-chroma
     print(f"Vector database created/updated and persisted successfully at {db_directory}!")
     return vectorstore
 
@@ -45,16 +42,22 @@ if __name__ == "__main__":
         c.drawString(100, 690, "And Section 2 talks about property rights.")
         c.save()
         print(f"Created a dummy PDF at {dummy_file} for testing.")
+    else:
+        print(f"Using existing dummy PDF at {dummy_file}.")
 
+
+    print("Loading and processing legal data...")
     legal_chunks = load_and_process_legal_data()
+
     if legal_chunks:
         # Create and persist the DB
         db = create_and_persist_vector_db(legal_chunks)
-        # You can now test retrieval
-        print("\nTesting retrieval from the database:")
-        query = "What are the rights of citizens?"
-        results = db.similarity_search(query, k=2) # Get top 2 most similar documents
-        for i, doc in enumerate(results):
-            print(f"--- Retrieved Document {i+1} ---")
-            print(f"Source: {doc.metadata.get('source', 'Unknown')}")
-            print(doc.page_content[:300] + "...") # Print first 300 chars
+        
+        # You can now test retrieval (optional, as chatbot_app.py does this)
+        # print("\nTesting retrieval from the database:")
+        # query = "What are the rights of citizens?"
+        # results = db.similarity_search(query, k=2)
+        # for doc in results:
+        #     print(doc.page_content)
+    else:
+        print("No legal documents found or processed. Vector database not created/updated.")

@@ -1,17 +1,17 @@
 # chatbot_app.py
 import os
-import re # Still needed for re.sub if not moved
+import re
 from datetime import datetime
 
 # Core LangChain components for RAG
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain.chains import RetrievalQA
+# UPDATED IMPORTS for HuggingFaceEmbeddings, Chroma, and Ollama
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from langchain_ollama import OllamaLLM # Note: The class name often changes to OllamaLLM
 
-# Ollama for local LLM inference
-from langchain_community.llms import Ollama
+from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
-from langchain.chains import LLMChain
+from langchain.chains import LLMChain # LLMChain is still used for detect_document_request, but is deprecated
 
 # Import the new function and constants from document_manager.py
 from document_manager import handle_document_filling, DOCUMENT_TEMPLATES
@@ -36,7 +36,7 @@ def load_rag_chain():
         print("Embedding model loaded.")
     except Exception as e:
         print(f"Error loading embedding model: {e}")
-        print("Please ensure 'sentence-transformers' and 'torch' are installed.")
+        print("Please ensure 'langchain-huggingface' and 'torch' are installed.")
         exit()
 
     print(f"Loading vector database from {CHROMA_DB_DIR}...")
@@ -49,12 +49,13 @@ def load_rag_chain():
         print("Vector database loaded.")
     except Exception as e:
         print(f"Error loading vector database: {e}")
-        print("Please ensure 'chromadb' is installed and your database exists.")
+        print("Please ensure 'langchain-chroma' is installed and your database exists.")
         exit()
 
     print("Initializing LLM...")
     try:
-        llm = Ollama(
+        # UPDATED: Use OllamaLLM class
+        llm = OllamaLLM(
             base_url=OLLAMA_BASE_URL,
             model=OLLAMA_MODEL_NAME,
             temperature=0.1,
@@ -62,7 +63,7 @@ def load_rag_chain():
         print(f"Using local LLM via Ollama: {OLLAMA_MODEL_NAME}")
     except Exception as e:
         print(f"Error initializing Local LLM via Ollama: {e}")
-        print("Please ensure Ollama is installed, the model is pulled, and the Ollama server is running.")
+        print("Please ensure Ollama is installed, the model is pulled, and the Ollama server is running, and 'langchain-ollama' is installed.")
         exit()
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
@@ -81,7 +82,6 @@ def detect_document_request(query, llm):
     Uses an LLM to determine if the query is a request for a document template
     and identifies which document type.
     """
-    # Use DOCUMENT_TEMPLATES imported from document_manager
     template_names = ", ".join(DOCUMENT_TEMPLATES.keys())
     
     prompt_template = PromptTemplate(
@@ -110,9 +110,11 @@ def detect_document_request(query, llm):
 
     llm_chain = LLMChain(prompt=prompt_template, llm=llm)
     
+    # Temporarily adjust temperature for classification task
+    original_temperature = llm.temperature # Store original temperature if it can be read
     llm.temperature = 0.3
     response = llm_chain.invoke({"query": query, "template_names": template_names})
-    llm.temperature = 0.1
+    llm.temperature = original_temperature # Reset to original
 
     detected_type = response['text'].strip().lower()
 
@@ -135,22 +137,21 @@ if __name__ == "__main__":
             print("Please enter a question.")
             continue
 
-        detected_doc_type = detect_document_request(user_query, llm)
-
-        if detected_doc_type != "NONE":
-            template_filename = DOCUMENT_TEMPLATES[detected_doc_type]
-            print(f"\nLexiBot: It looks like you're asking for a '{detected_doc_type}' template. I have a template for that: {template_filename}.")
-            print("LexiBot: Would you like me to help you fill it out? (yes/no)")
-            
-            confirm_fill = input("Your answer: ").strip().lower()
-            if confirm_fill == 'yes':
-                # Call the imported handle_document_filling function
-                handle_document_filling(detected_doc_type)
-            else:
-                print("LexiBot: Okay, no problem. What else can I help you with?")
-            continue
-
         try:
+            detected_doc_type = detect_document_request(user_query, llm)
+
+            if detected_doc_type != "NONE":
+                template_filename = DOCUMENT_TEMPLATES[detected_doc_type]
+                print(f"\nLexiBot: It looks like you're asking for a '{detected_doc_type}' template. I have a template for that: {template_filename}.")
+                print("LexiBot: Would you like me to help you fill it out? (yes/no)")
+                
+                confirm_fill = input("Your answer: ").strip().lower()
+                if confirm_fill == 'yes':
+                    handle_document_filling(detected_doc_type)
+                else:
+                    print("LexiBot: Okay, no problem. What else can I help you with?")
+                continue
+
             response = qa_chain.invoke({"query": user_query})
 
             print("\nLexiBot's Answer:")
