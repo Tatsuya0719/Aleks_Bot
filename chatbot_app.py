@@ -1,5 +1,6 @@
+# chatbot_app.py
 import os
-import re
+import re # Still needed for re.sub if not moved
 from datetime import datetime
 
 # Core LangChain components for RAG
@@ -12,6 +13,9 @@ from langchain_community.llms import Ollama
 from langchain_core.prompts import PromptTemplate
 from langchain.chains import LLMChain
 
+# Import the new function and constants from document_manager.py
+from document_manager import handle_document_filling, DOCUMENT_TEMPLATES
+
 
 # --- Configuration ---
 CHROMA_DB_DIR = "./chroma_db"
@@ -20,30 +24,6 @@ EMBEDDINGS_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L1
 # --- Ollama Configuration ---
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_MODEL_NAME = "mistral"
-
-# --- Document Template Configuration ---
-TEMPLATE_DIR = "./document_templates"
-DOCUMENT_TEMPLATES = {
-    "nda": "simple_nda_template.txt",
-    "non-disclosure agreement": "simple_nda_template.txt",
-    # Add more mappings as you create more templates (e.g., "lease agreement": "lease_agreement_template.txt")
-}
-
-# --- NEW: Placeholder Descriptions ---
-# This dictionary maps placeholder names (from your templates) to user-friendly explanations.
-# You will need to expand this as you add more templates and placeholders.
-PLACEHOLDER_DESCRIPTIONS = {
-    "PARTY_ONE_NAME": "The full legal name of the Disclosing Party (the one sharing confidential information)",
-    "PARTY_ONE_ADDRESS": "The complete address of the Disclosing Party",
-    "PARTY_TWO_NAME": "The full legal name of the Receiving Party (the one receiving confidential information)",
-    "PARTY_TWO_ADDRESS": "The complete address of the Receiving Party",
-    "CONFIDENTIAL_INFO_DESCRIPTION": "A brief description of the type of confidential information being shared (e.g., business plans, product designs, customer lists)",
-    "CONFIDENTIAL_INFO_EXAMPLES": "Specific examples of confidential information (e.g., 'technical data, formulas, marketing strategies')",
-    "agreement_term_months": "The duration of the agreement in months (e.g., 12 for one year)",
-    # Add descriptions for other placeholders here, if you add them to your templates
-    # "CLIENT_NAME": "Full legal name of the client",
-    # "SERVICE_DESCRIPTION": "Detailed description of the services to be provided",
-}
 
 
 def load_rag_chain():
@@ -101,6 +81,7 @@ def detect_document_request(query, llm):
     Uses an LLM to determine if the query is a request for a document template
     and identifies which document type.
     """
+    # Use DOCUMENT_TEMPLATES imported from document_manager
     template_names = ", ".join(DOCUMENT_TEMPLATES.keys())
     
     prompt_template = PromptTemplate(
@@ -139,72 +120,6 @@ def detect_document_request(query, llm):
         return detected_type
     return "NONE"
 
-def handle_document_filling(template_key):
-    """
-    Guides the user through filling out a document template.
-    """
-    template_filename = DOCUMENT_TEMPLATES[template_key]
-    template_path = os.path.join(TEMPLATE_DIR, template_filename)
-
-    if not os.path.exists(template_path):
-        print(f"LexiBot: Error: Template file '{template_filename}' not found at '{template_path}'.")
-        return
-
-    print(f"\nLexiBot: Okay, let's fill out your '{template_key}' template.")
-    
-    try:
-        with open(template_path, 'r', encoding='utf-8') as f:
-            template_content = f.read()
-    except Exception as e:
-        print(f"LexiBot: Error reading template file: {e}")
-        return
-
-    placeholders = set(re.findall(r'\[(.*?)\]|\{\{(.*?)\}\}', template_content))
-    placeholders = {p.strip() for tup in placeholders for p in tup if p.strip()}
-    
-    if 'current_date' in placeholders:
-        placeholders.remove('current_date')
-
-    filled_data = {}
-    print("\nLexiBot: Please provide the following details:")
-
-    if 'current_date' in template_content:
-        filled_data['current_date'] = datetime.now().strftime("%B %d, %Y")
-        print(f"LexiBot: Setting current date to: {filled_data['current_date']}")
-
-    for placeholder in sorted(list(placeholders)):
-        # --- NEW: Get and display description for the placeholder ---
-        description = PLACEHOLDER_DESCRIPTIONS.get(placeholder, placeholder.replace('_', ' ').title())
-        user_input = input(f"LexiBot: {description}: ") # Use description in prompt
-        filled_data[placeholder] = user_input
-
-    filled_document = template_content
-    for placeholder, value in filled_data.items():
-        filled_document = re.sub(rf"\[{re.escape(placeholder)}\]|" + r"\{\{" + re.escape(placeholder) + r"\}\}", value, filled_document)
-
-    print("\n" + "="*50)
-    print("LexiBot: Here is your filled document preview:")
-    print("="*50)
-    print(filled_document)
-    print("="*50 + "\n")
-
-    print("LexiBot: Please review the document carefully.")
-    review_correct = input("LexiBot: Is everything correct? (yes/no): ").strip().lower()
-
-    if review_correct == 'yes':
-        print("LexiBot: Great! The document is finalized.")
-        output_filename = f"filled_{template_key}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        output_path = os.path.join(TEMPLATE_DIR, output_filename)
-        try:
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(filled_document)
-            print(f"LexiBot: Document saved as '{output_filename}' in the '{TEMPLATE_DIR}' folder.")
-            print("LexiBot: (Mock process for sending to government agency complete.)")
-        except Exception as e:
-            print(f"LexiBot: Error saving document: {e}")
-    else:
-        print("LexiBot: Okay, please indicate what needs to be changed for future improvements.")
-        print("LexiBot: For now, you can manually edit the content from the preview above.")
 
 # --- Main application logic ---
 if __name__ == "__main__":
@@ -229,6 +144,7 @@ if __name__ == "__main__":
             
             confirm_fill = input("Your answer: ").strip().lower()
             if confirm_fill == 'yes':
+                # Call the imported handle_document_filling function
                 handle_document_filling(detected_doc_type)
             else:
                 print("LexiBot: Okay, no problem. What else can I help you with?")
