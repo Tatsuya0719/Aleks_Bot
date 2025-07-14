@@ -27,6 +27,7 @@ app = FastAPI(
 origins = [
     "http://localhost",
     "http://localhost:5173", # Default Vite dev server port
+    "http://10.147.18.65:5173"
     # Add your deployed website domain here, e.g., "https://your-bolt-app.com"
 ]
 
