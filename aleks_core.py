@@ -107,6 +107,7 @@ def get_rag_response(query: str) -> dict:
     print(f"DEBUG: Invoking RAG chain with query: '{query}'") # Removed language from debug print
     
     try: 
+        print("DEBUG: Before qa_chain.invoke - attempting RAG process...") # NEW DEBUG PRINT
         # Pass only 'query' to the chain's invoke method
         response = qa_chain.invoke({"query": query}) # Removed language from invoke
         print(f"DEBUG: RAG chain returned response: {response}") # DEBUG
