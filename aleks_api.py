@@ -1,17 +1,16 @@
 # aleks_api.py
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse # NEW: Import StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
 import os
 import re
 from datetime import datetime
 import traceback 
-import asyncio # NEW: Import asyncio for async generators
+import asyncio 
 
 # Import core Aleks functions and constants from the refactored files
-# MODIFIED: get_rag_response_stream is the new streaming function
 from aleks_core import initialize_aleks_components, get_rag_response_stream, detect_document_request 
 from document_manager import DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS, TEMPLATE_DIR 
 
@@ -24,10 +23,8 @@ app = FastAPI(
 )
 
 # --- CORS Configuration ---
-# IMPORTANT: For production, change "*" to your specific Netlify URL (e.g., "https://your-site.netlify.app")
 origins = [
-    "*" # Temporarily allow all origins for debugging. CHANGE THIS FOR PRODUCTION!
-    # "https://YOUR-NETLIFY-SITE-NAME.netlify.app", 
+    "*" 
 ]
 
 app.add_middleware(
@@ -63,7 +60,8 @@ async def startup_event():
         traceback.print_exc() 
         raise 
 
-@app.post("/api/chat")
+# FIX: Changed endpoint back to "/api/chat" to match frontend and netlify.toml proxy
+@app.post("/api/chat") 
 async def chat_with_aleks(request: ChatRequest):
     """
     Main chat endpoint. Detects document requests or performs RAG.
@@ -73,7 +71,6 @@ async def chat_with_aleks(request: ChatRequest):
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
-    # 1. Detect if it's a document request (this part will NOT stream)
     detected_doc_type = detect_document_request(user_message)
 
     if detected_doc_type != "NONE":
@@ -109,9 +106,6 @@ async def chat_with_aleks(request: ChatRequest):
             "placeholders_to_fill": placeholder_details
         }
     else:
-        # 2. Perform RAG query (this part WILL stream)
-        # NEW: Return StreamingResponse
-        # The content type is important for the frontend to interpret the stream
         return StreamingResponse(get_rag_response_stream(user_message), media_type="text/event-stream")
 
 @app.post("/api/generate_document")
