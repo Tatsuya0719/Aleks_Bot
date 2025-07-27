@@ -27,13 +27,14 @@ OLLAMA_MODEL_NAME = "mistral"
 # Global variables for the AI components (will be initialized once)
 qa_chain = None
 llm = None
+retriever = None # Make retriever global for direct testing if needed
 
 def initialize_aleks_components():
     """
     Initializes the RAG chain and LLM, making them globally accessible for API endpoints.
     This function should be called once when the FastAPI application starts.
     """
-    global qa_chain, llm
+    global qa_chain, llm, retriever # Add retriever to global
     print("Initializing Aleks AI components...")
     
     print("Loading embedding model for retrieval...")
@@ -104,13 +105,18 @@ def get_rag_response(query: str) -> dict:
         raise RuntimeError("Aleks components not initialized. Call initialize_aleks_components first.")
     
     # DEBUG: print statements for more visibility
-    print(f"DEBUG: Invoking RAG chain with query: '{query}'") # Removed language from debug print
+    print(f"DEBUG: Invoking RAG chain with query: '{query}'") 
     
     try: 
-        print("DEBUG: Before qa_chain.invoke - attempting RAG process...") # NEW DEBUG PRINT
-        # Pass only 'query' to the chain's invoke method
-        response = qa_chain.invoke({"query": query}) # Removed language from invoke
-        print(f"DEBUG: RAG chain returned response: {response}") # DEBUG
+        print("DEBUG: Before qa_chain.invoke - attempting RAG process...") 
+        # Add more granular prints within the try block
+        print("DEBUG: Starting document retrieval...") # NEW DEBUG PRINT
+        # This is where the retriever is called implicitly by qa_chain.invoke
+        # If it hangs here, the issue is with ChromaDB retrieval
+        
+        response = qa_chain.invoke({"query": query}) 
+        print("DEBUG: Document retrieval and LLM generation completed.") # NEW DEBUG PRINT
+        print(f"DEBUG: RAG chain returned response: {response}") 
     except Exception as e:
         print(f"CRITICAL ERROR IN RAG CHAIN INVOCATION: {e}")
         traceback.print_exc() 
@@ -146,7 +152,7 @@ def detect_document_request(query: str) -> str:
     
     # Document detection prompt (Removed Language Instruction)
     prompt_template = PromptTemplate(
-        input_variables=["query", "template_names"], # Removed language from input_variables
+        input_variables=["query", "template_names"], 
         template="""You are an AI assistant. Analyze the user's query to determine if they are asking for a legal document template.
 If they are, identify which specific document they are asking for from the following types: {template_names}.
 If you identify a document, respond ONLY with the document type (e.g., "nda", "non-disclosure agreement").
@@ -170,7 +176,7 @@ User: Kailangan ko ng NDA. (I need an NDA.)
 Response: nda
 
 Query: {query}
-Response:""" # Removed User's Language from prompt
+Response:""" 
     )
 
     llm_chain = LLMChain(prompt=prompt_template, llm=llm)
@@ -180,7 +186,7 @@ Response:""" # Removed User's Language from prompt
     llm.temperature = 0.3
     try: 
         # Pass only 'query' and 'template_names' to invoke
-        response = llm_chain.invoke({"query": query, "template_names": template_names}) # Removed language from invoke
+        response = llm_chain.invoke({"query": query, "template_names": template_names}) 
     except Exception as e:
         print(f"CRITICAL ERROR IN LLMCHAIN INVOCATION (Document Detection): {e}")
         traceback.print_exc() 
