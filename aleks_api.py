@@ -60,8 +60,8 @@ async def startup_event():
         traceback.print_exc() 
         raise 
 
-# FIX: Changed endpoint back to "/api/chat" to match frontend and netlify.toml proxy
-@app.post("/api/chat") 
+# FIX: Changed endpoint path from "/api/chat" to "/chat" to match Netlify's proxy forwarding
+@app.post("/chat") 
 async def chat_with_aleks(request: ChatRequest):
     """
     Main chat endpoint. Detects document requests or performs RAG.
