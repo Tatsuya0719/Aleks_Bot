@@ -62,7 +62,7 @@ def initialize_aleks_components():
             base_url=OLLAMA_BASE_URL,
             model=OLLAMA_MODEL_NAME,
             temperature=0.1,
-            verbose=True, # ADDED: For more debugging output from LangChain
+            verbose=True, # For more debugging output from LangChain
         )
         print(f"Using local LLM via Ollama: {OLLAMA_MODEL_NAME}")
     except Exception as e:
@@ -72,7 +72,7 @@ def initialize_aleks_components():
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
 
-    # NEW: Custom RAG Prompt Template for Language Instruction
+    # Custom RAG Prompt Template for Language Instruction
     rag_template = """You are Aleks, an AI legal assistant specializing in Philippine law.
 Use the following pieces of context to answer the user's question.
 If you don't know the answer, just say that you don't know, don't try to make up an answer.
@@ -109,6 +109,7 @@ def get_rag_response(query: str, language: str = "en") -> dict:
     print(f"DEBUG: Invoking RAG chain with query: '{query}' and language: '{language}'")
     
     # Pass language to the chain's invoke method
+    # FIX: Ensure 'language' is passed to qa_chain.invoke
     response = qa_chain.invoke({"query": query, "language": language})
     
     print(f"DEBUG: RAG chain returned response: {response}") # DEBUG
@@ -176,7 +177,7 @@ Response:"""
     # Temporarily adjust temperature for classification task
     original_temperature = llm.temperature
     llm.temperature = 0.3
-    # NEW: Pass language to invoke
+    # FIX: Ensure 'language' is passed to llm_chain.invoke
     response = llm_chain.invoke({"query": query, "template_names": template_names, "language": language})
     llm.temperature = original_temperature
 
