@@ -96,20 +96,6 @@ Helpful Answer:"""
     )
     print("Aleks AI components loaded successfully!")
 
-    # Inside initialize_aleks_components, after qa_chain is initialized
-    print("DEBUG: Attempting direct retriever test...")
-    try:
-        test_query = "What are the rights of workers?"
-        retrieved_docs = retriever.get_relevant_documents(test_query)
-        print(f"DEBUG: Retriever test successful. Found {len(retrieved_docs)} documents for query: '{test_query}'")
-        for i, doc in enumerate(retrieved_docs[:2]): # Print first 2 snippets
-            print(f"DEBUG: Retrieved Doc {i+1} (Source: {doc.metadata.get('source')}): {doc.page_content[:100]}...")
-    except Exception as e:
-        print(f"CRITICAL ERROR: Direct retriever test failed: {e}")
-        traceback.print_exc()
-        # Do NOT re-raise here, let the app start even if test fails for now
-    print("DEBUG: Direct retriever test completed.")
-
 # MODIFIED: get_rag_response no longer accepts language
 def get_rag_response(query: str) -> dict:
     """
