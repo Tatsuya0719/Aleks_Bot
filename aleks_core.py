@@ -22,7 +22,7 @@ EMBEDDINGS_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L1
 
 # --- Ollama Configuration ---
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL_NAME = "mistral"
+OLLAMA_MODEL_NAME = "phi3:mini"
 
 # Global variables for the AI components (will be initialized once)
 qa_chain = None
