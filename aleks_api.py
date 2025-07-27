@@ -26,10 +26,12 @@ app = FastAPI(
 # In production, this would be your actual website domain.
 origins = [
     "http://localhost",
-    "http://localhost:5173", # Default Vite dev server port
-    "http://10.147.18.65:5173",
-    "https://aleksai.netlify.app"
-    # Add your deployed website domain here, e.g., "https://your-bolt-app.com"
+    "http://localhost:5173",
+    # If you were using ZeroTier locally, keep this:
+    # "http://10.147.18.65:5173", # Your Host Machine's ZeroTier IP and frontend port
+    "https://aleksai.netlify.app", # <--- ADD THIS EXACT LINE
+    # If you have a custom domain for Netlify, add it here too:
+    # "https://www.yourcustomdomain.com",
 ]
 
 app.add_middleware(
