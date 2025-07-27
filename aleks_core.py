@@ -2,18 +2,19 @@
 import os
 import re
 from datetime import datetime
+import traceback 
 
 # Core LangChain components for RAG - make sure these are the updated ones
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-from langchain_ollama import OllamaLLM # Note: The class name often changes to OllamaLLM
+from langchain_ollama import OllamaLLM 
 
 from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
-from langchain.chains import LLMChain # Still used, but deprecated
+from langchain.chains import LLMChain 
 
 # Import constants from document_manager
-from document_manager import DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS, TEMPLATE_DIR # Also need placeholder descriptions and TEMPLATE_DIR now
+from document_manager import DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS, TEMPLATE_DIR 
 
 # --- Configuration ---
 CHROMA_DB_DIR = "./chroma_db"
@@ -42,23 +43,23 @@ def initialize_aleks_components():
     except Exception as e:
         print(f"Error loading embedding model: {e}")
         print("Please ensure 'langchain-huggingface' and 'torch' are installed.")
-        raise # Re-raise to stop app if critical component fails
+        raise 
 
     print(f"Loading vector database from {CHROMA_DB_DIR}...")
     try:
         if not os.path.exists(CHROMA_DB_DIR):
             print(f"Error: Chroma DB directory '{CHROMA_DB_DIR}' not found. Please ensure you have run the data ingestion script.")
-            raise # Re-raise
+            raise 
         vectorstore = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings)
         print("Vector database loaded.")
     except Exception as e:
         print(f"Error loading vector database: {e}")
         print("Please ensure 'langchain-chroma' is installed and your database exists.")
-        raise # Re-raise
+        raise 
 
     print("Initializing LLM...")
     try:
-        llm = OllamaLLM( # Use OllamaLLM
+        llm = OllamaLLM( 
             base_url=OLLAMA_BASE_URL,
             model=OLLAMA_MODEL_NAME,
             temperature=0.1,
@@ -68,21 +69,18 @@ def initialize_aleks_components():
     except Exception as e:
         print(f"Error initializing Local LLM via Ollama: {e}")
         print("Please ensure Ollama is installed, the model is pulled, and the Ollama server is running, and 'langchain-ollama' is installed.")
-        raise # Re-raise
+        raise 
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
 
-    # Custom RAG Prompt Template for Language Instruction
+    # Custom RAG Prompt Template (Removed Language Instruction)
     rag_template = """You are Aleks, an AI legal assistant specializing in Philippine law.
 Use the following pieces of context to answer the user's question.
 If you don't know the answer, just say that you don't know, don't try to make up an answer.
-Always answer in the language specified by the user's language preference.
-If the user's language preference is 'fil', respond in Filipino.
-If the user's language preference is 'en', respond in English.
+Always answer in English.
 
 Context: {context}
 Question: {question}
-User's Language Preference: {language}
 
 Helpful Answer:"""
     RAG_PROMPT_CUSTOM = PromptTemplate.from_template(rag_template)
@@ -97,22 +95,25 @@ Helpful Answer:"""
     )
     print("Aleks AI components loaded successfully!")
 
-# MODIFIED: get_rag_response now accepts language
-def get_rag_response(query: str, language: str = "en") -> dict:
+# MODIFIED: get_rag_response no longer accepts language
+def get_rag_response(query: str) -> dict:
     """
-    Performs RAG query using the initialized qa_chain, with language instruction.
+    Performs RAG query using the initialized qa_chain.
     """
     if qa_chain is None:
         raise RuntimeError("Aleks components not initialized. Call initialize_aleks_components first.")
     
     # DEBUG: print statements for more visibility
-    print(f"DEBUG: Invoking RAG chain with query: '{query}' and language: '{language}'")
+    print(f"DEBUG: Invoking RAG chain with query: '{query}'") # Removed language from debug print
     
-    # Pass language to the chain's invoke method
-    # FIX: Ensure 'language' is passed to qa_chain.invoke
-    response = qa_chain.invoke({"query": query, "language": language})
-    
-    print(f"DEBUG: RAG chain returned response: {response}") # DEBUG
+    try: 
+        # Pass only 'query' to the chain's invoke method
+        response = qa_chain.invoke({"query": query}) # Removed language from invoke
+        print(f"DEBUG: RAG chain returned response: {response}") # DEBUG
+    except Exception as e:
+        print(f"CRITICAL ERROR IN RAG CHAIN INVOCATION: {e}")
+        traceback.print_exc() 
+        raise 
 
     # Format source documents nicely for API response
     sources_info = []
@@ -131,25 +132,25 @@ def get_rag_response(query: str, language: str = "en") -> dict:
         "sources": sources_info
     }
 
-# MODIFIED: detect_document_request now accepts language
-def detect_document_request(query: str, language: str = "en") -> str:
+# MODIFIED: detect_document_request no longer accepts language
+def detect_document_request(query: str) -> str:
     """
     Uses an LLM to determine if the query is a request for a document template
-    and identifies which document type, considering the user's language.
+    and identifies which document type.
     """
     if llm is None:
         raise RuntimeError("Aleks components not initialized. Call initialize_aleks_components first.")
 
     template_names = ", ".join(DOCUMENT_TEMPLATES.keys())
     
-    # NEW: Add language instruction to document detection prompt
+    # Document detection prompt (Removed Language Instruction)
     prompt_template = PromptTemplate(
-        input_variables=["query", "template_names", "language"],
+        input_variables=["query", "template_names"], # Removed language from input_variables
         template="""You are an AI assistant. Analyze the user's query to determine if they are asking for a legal document template.
 If they are, identify which specific document they are asking for from the following types: {template_names}.
 If you identify a document, respond ONLY with the document type (e.g., "nda", "non-disclosure agreement").
 If the query is NOT a document request, respond ONLY with "NONE".
-Respond in the language specified by 'language' if you need to clarify, otherwise just the document type or NONE.
+Always respond in English if you need to clarify, otherwise just the document type or NONE.
 
 Examples:
 User: I need an NDA.
@@ -168,8 +169,7 @@ User: Kailangan ko ng NDA. (I need an NDA.)
 Response: nda
 
 Query: {query}
-User's Language: {language}
-Response:"""
+Response:""" # Removed User's Language from prompt
     )
 
     llm_chain = LLMChain(prompt=prompt_template, llm=llm)
@@ -177,8 +177,13 @@ Response:"""
     # Temporarily adjust temperature for classification task
     original_temperature = llm.temperature
     llm.temperature = 0.3
-    # FIX: Ensure 'language' is passed to llm_chain.invoke
-    response = llm_chain.invoke({"query": query, "template_names": template_names, "language": language})
+    try: 
+        # Pass only 'query' and 'template_names' to invoke
+        response = llm_chain.invoke({"query": query, "template_names": template_names}) # Removed language from invoke
+    except Exception as e:
+        print(f"CRITICAL ERROR IN LLMCHAIN INVOCATION (Document Detection): {e}")
+        traceback.print_exc() 
+        raise 
     llm.temperature = original_temperature
 
     detected_type = response['text'].strip().lower()
