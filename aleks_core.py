@@ -72,7 +72,7 @@ def initialize_aleks_components():
         print("Please ensure Ollama is installed, the model is pulled, and the Ollama server is running, and 'langchain-ollama' is installed.")
         raise 
 
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
 
     # Custom RAG Prompt Template 
     rag_template = """You are Aleks, an AI legal assistant specializing in Philippine law.
