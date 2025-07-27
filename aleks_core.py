@@ -91,7 +91,7 @@ Helpful Answer:"""
         chain_type="stuff",
         retriever=retriever,
         return_source_documents=True,
-        chain_type_kwargs={"prompt": RAG_PROMPT_CUSTOM} # Apply custom prompt
+        # REMOVED: chain_type_kwargs={"prompt": RAG_PROMPT_CUSTOM} # Remove this for aggressive testing
     )
     print("Aleks AI components loaded successfully!")
 
