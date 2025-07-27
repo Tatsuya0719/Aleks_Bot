@@ -6,7 +6,7 @@
       from = "/api/*"
       # This is the full URL of your GCP VM's FastAPI backend
       # REPLACE 'YOUR_GCP_VM_EXTERNAL_IP' with the actual External IP of your VM
-      to = "http://34.124.216.192:8000/:splat"
+      to = "http://34.126.71.177:8000/:splat"
       # The status 200 means it's a proxy, so the browser thinks it's a direct response
       status = 200
       # force = true ensures this rule takes precedence
