@@ -74,7 +74,7 @@ def initialize_aleks_components():
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
 
-    # Custom RAG Prompt Template (Removed Language Instruction)
+    # Custom RAG Prompt Template 
     rag_template = """You are Aleks, an AI legal assistant specializing in Philippine law.
 Use the following pieces of context to answer the user's question.
 If you don't know the answer, just say that you don't know, don't try to make up an answer.
@@ -92,7 +92,7 @@ Helpful Answer:"""
         chain_type="stuff",
         retriever=retriever,
         return_source_documents=True,
-        # REMOVED: chain_type_kwargs={"prompt": RAG_PROMPT_CUSTOM} # Remove this for aggressive testing
+        # REMOVED: chain_type_kwargs={"prompt": RAG_PROMPT_CUSTOM} 
     )
     print("Aleks AI components loaded successfully!")
 
@@ -104,42 +104,81 @@ def get_rag_response(query: str) -> dict:
     if qa_chain is None:
         raise RuntimeError("Aleks components not initialized. Call initialize_aleks_components first.")
     
-    # DEBUG: print statements for more visibility
+    # DEBUG: print statements for more visibility and timing
     print(f"DEBUG: Invoking RAG chain with query: '{query}'") 
     
     try: 
         print("DEBUG: Before qa_chain.invoke - attempting RAG process...") 
-        # Add more granular prints within the try block
-        print("DEBUG: Starting document retrieval...") # NEW DEBUG PRINT
-        # This is where the retriever is called implicitly by qa_chain.invoke
-        # If it hangs here, the issue is with ChromaDB retrieval
         
-        response = qa_chain.invoke({"query": query}) 
-        print("DEBUG: Document retrieval and LLM generation completed.") # NEW DEBUG PRINT
-        print(f"DEBUG: RAG chain returned response: {response}") 
+        # --- Start timing for retrieval ---
+        retrieval_start_time = datetime.now()
+        print(f"DEBUG: Starting document retrieval... (Time: {retrieval_start_time.strftime('%H:%M:%S.%f')})") 
+        
+        # The qa_chain.invoke implicitly calls the retriever first, then the LLM.
+        # We need to explicitly call retriever for accurate timing.
+        
+        # Step 1: Document Retrieval
+        retrieved_docs = retriever.get_relevant_documents(query)
+        retrieval_end_time = datetime.now()
+        retrieval_duration = (retrieval_end_time - retrieval_start_time).total_seconds()
+        print(f"DEBUG: Document retrieval completed. Found {len(retrieved_docs)} documents in {retrieval_duration:.2f} seconds.")
+        # If this point is reached quickly, the hang is in the LLM part
+
+        # Step 2: LLM Generation with retrieved context
+        print(f"DEBUG: Starting LLM generation with context... (Time: {retrieval_end_time.strftime('%H:%M:%S.%f')})") # This is retrieval_end_time which is start of LLM
+        
+        # Manually create the input for the LLM based on retrieved docs
+        context_text = "\n\n".join([doc.page_content for doc in retrieved_docs])
+        
+        # Reconstruct the prompt template with context and question
+        llm_prompt = PromptTemplate.from_template(
+            """You are Aleks, an AI legal assistant specializing in Philippine law.
+Use the following pieces of context to answer the user's question.
+If you don't know the answer, just say that you don't know, don't try to make up an answer.
+Always answer in English.
+
+Context: {context}
+Question: {question}
+
+Helpful Answer:"""
+        )
+        
+        llm_chain = LLMChain(prompt=llm_prompt, llm=llm)
+        
+        llm_generation_start_time = datetime.now() # More accurate start time for LLM
+        
+        # Pass context and query to the LLM chain
+        response_from_llm_chain = llm_chain.invoke({"context": context_text, "question": query})
+        
+        llm_generation_end_time = datetime.now()
+        llm_generation_duration = (llm_generation_end_time - llm_generation_start_time).total_seconds()
+        print(f"DEBUG: LLM generation completed in {llm_generation_duration:.2f} seconds.")
+        
+        # Combine the results as RetrievalQA would
+        final_result = response_from_llm_chain['text'] # Assuming LLMChain returns text in 'text' key
+        
+        # Format source documents nicely for API response
+        sources_info = []
+        if retrieved_docs: # Use retrieved_docs directly here
+            for i, doc in enumerate(retrieved_docs):
+                source_name = doc.metadata.get('source', 'Unknown Document')
+                start_index = doc.metadata.get('start_index', 'N/A')
+                sources_info.append({
+                    "source": source_name,
+                    "startIndex": start_index,
+                    "snippet": doc.page_content[:200] + "..." 
+                })
+
+        return {
+            "answer": final_result,
+            "sources": sources_info
+        }
+
     except Exception as e:
         print(f"CRITICAL ERROR IN RAG CHAIN INVOCATION: {e}")
         traceback.print_exc() 
         raise 
 
-    # Format source documents nicely for API response
-    sources_info = []
-    if response.get("source_documents"):
-        for i, doc in enumerate(response["source_documents"]):
-            source_name = doc.metadata.get('source', 'Unknown Document')
-            start_index = doc.metadata.get('start_index', 'N/A')
-            sources_info.append({
-                "source": source_name,
-                "startIndex": start_index,
-                "snippet": doc.page_content[:200] + "..." # Limit snippet length
-            })
-
-    return {
-        "answer": response["result"],
-        "sources": sources_info
-    }
-
-# MODIFIED: detect_document_request no longer accepts language
 def detect_document_request(query: str) -> str:
     """
     Uses an LLM to determine if the query is a request for a document template
@@ -150,7 +189,7 @@ def detect_document_request(query: str) -> str:
 
     template_names = ", ".join(DOCUMENT_TEMPLATES.keys())
     
-    # Document detection prompt (Removed Language Instruction)
+    # Document detection prompt
     prompt_template = PromptTemplate(
         input_variables=["query", "template_names"], 
         template="""You are an AI assistant. Analyze the user's query to determine if they are asking for a legal document template.
