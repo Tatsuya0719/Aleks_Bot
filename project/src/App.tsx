@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, FormEvent } from 'react';
 // Define the API base URL for your FastAPI server
 // const API_BASE_URL = 'http://localhost:8000';
 // const API_BASE_URL = 'http://34.124.216.192:8000';
-const API_BASE_URL = '/api';
+const API_BASE_URL = 'http://34.124.216.192:8000';
 
 // Define types for messages and placeholders for better type safety (optional but good practice)
 interface Message {
