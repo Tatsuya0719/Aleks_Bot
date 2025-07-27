@@ -62,6 +62,7 @@ def initialize_aleks_components():
             base_url=OLLAMA_BASE_URL,
             model=OLLAMA_MODEL_NAME,
             temperature=0.1,
+            verbose=True, # ADDED: For more debugging output from LangChain
         )
         print(f"Using local LLM via Ollama: {OLLAMA_MODEL_NAME}")
     except Exception as e:
@@ -71,23 +72,47 @@ def initialize_aleks_components():
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
 
+    # NEW: Custom RAG Prompt Template for Language Instruction
+    rag_template = """You are Aleks, an AI legal assistant specializing in Philippine law.
+Use the following pieces of context to answer the user's question.
+If you don't know the answer, just say that you don't know, don't try to make up an answer.
+Always answer in the language specified by the user's language preference.
+If the user's language preference is 'fil', respond in Filipino.
+If the user's language preference is 'en', respond in English.
+
+Context: {context}
+Question: {question}
+User's Language Preference: {language}
+
+Helpful Answer:"""
+    RAG_PROMPT_CUSTOM = PromptTemplate.from_template(rag_template)
+
+
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
         retriever=retriever,
-        return_source_documents=True
+        return_source_documents=True,
+        chain_type_kwargs={"prompt": RAG_PROMPT_CUSTOM} # Apply custom prompt
     )
     print("Aleks AI components loaded successfully!")
 
-def get_rag_response(query: str) -> dict:
+# MODIFIED: get_rag_response now accepts language
+def get_rag_response(query: str, language: str = "en") -> dict:
     """
-    Performs RAG query using the initialized qa_chain.
+    Performs RAG query using the initialized qa_chain, with language instruction.
     """
     if qa_chain is None:
         raise RuntimeError("Aleks components not initialized. Call initialize_aleks_components first.")
     
-    response = qa_chain.invoke({"query": query})
+    # DEBUG: print statements for more visibility
+    print(f"DEBUG: Invoking RAG chain with query: '{query}' and language: '{language}'")
     
+    # Pass language to the chain's invoke method
+    response = qa_chain.invoke({"query": query, "language": language})
+    
+    print(f"DEBUG: RAG chain returned response: {response}") # DEBUG
+
     # Format source documents nicely for API response
     sources_info = []
     if response.get("source_documents"):
@@ -105,38 +130,45 @@ def get_rag_response(query: str) -> dict:
         "sources": sources_info
     }
 
-def detect_document_request(query: str) -> str:
+# MODIFIED: detect_document_request now accepts language
+def detect_document_request(query: str, language: str = "en") -> str:
     """
     Uses an LLM to determine if the query is a request for a document template
-    and identifies which document type.
+    and identifies which document type, considering the user's language.
     """
     if llm is None:
         raise RuntimeError("Aleks components not initialized. Call initialize_aleks_components first.")
 
     template_names = ", ".join(DOCUMENT_TEMPLATES.keys())
     
+    # NEW: Add language instruction to document detection prompt
     prompt_template = PromptTemplate(
-        input_variables=["query", "template_names"],
+        input_variables=["query", "template_names", "language"],
         template="""You are an AI assistant. Analyze the user's query to determine if they are asking for a legal document template.
-        If they are, identify which specific document they are asking for from the following types: {template_names}.
-        If you identify a document, respond ONLY with the document type (e.g., "nda", "non-disclosure agreement").
-        If the query is NOT a document request, respond ONLY with "NONE".
+If they are, identify which specific document they are asking for from the following types: {template_names}.
+If you identify a document, respond ONLY with the document type (e.g., "nda", "non-disclosure agreement").
+If the query is NOT a document request, respond ONLY with "NONE".
+Respond in the language specified by 'language' if you need to clarify, otherwise just the document type or NONE.
 
-        Examples:
-        User: I need an NDA.
-        Response: nda
+Examples:
+User: I need an NDA.
+Response: nda
 
-        User: Can you help me draft a non-disclosure agreement?
-        Response: non-disclosure agreement
+User: Can you help me draft a non-disclosure agreement?
+Response: non-disclosure agreement
 
-        User: What are the tax requirements for a new business?
-        Response: NONE
+User: What are the tax requirements for a new business?
+Response: NONE
 
-        User: Draft a simple contract.
-        Response: NONE
+User: Draft a simple contract.
+Response: NONE
 
-        Query: {query}
-        Response:"""
+User: Kailangan ko ng NDA. (I need an NDA.)
+Response: nda
+
+Query: {query}
+User's Language: {language}
+Response:"""
     )
 
     llm_chain = LLMChain(prompt=prompt_template, llm=llm)
@@ -144,7 +176,8 @@ def detect_document_request(query: str) -> str:
     # Temporarily adjust temperature for classification task
     original_temperature = llm.temperature
     llm.temperature = 0.3
-    response = llm_chain.invoke({"query": query, "template_names": template_names})
+    # NEW: Pass language to invoke
+    response = llm_chain.invoke({"query": query, "template_names": template_names, "language": language})
     llm.temperature = original_temperature
 
     detected_type = response['text'].strip().lower()
@@ -152,6 +185,3 @@ def detect_document_request(query: str) -> str:
     if detected_type in DOCUMENT_TEMPLATES:
         return detected_type
     return "NONE"
-
-# Removed the interactive handle_document_filling as its logic will be split across API calls in aleks_api.py
-# document_manager.py will still contain TEMPLATE_DIR, DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS
