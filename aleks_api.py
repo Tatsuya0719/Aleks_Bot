@@ -6,11 +6,11 @@ import uvicorn
 import os
 import re
 from datetime import datetime
-from typing import Optional # Import Optional for optional fields
+from typing import Optional 
+import traceback # NEW: Import traceback module
 
-# Import core aleks functions and constants from the refactored file
+# Import core Aleks functions and constants from the refactored files
 from aleks_core import initialize_aleks_components, get_rag_response, detect_document_request
-# Import document related constants from document_manager
 from document_manager import DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS, TEMPLATE_DIR 
 
 
@@ -42,12 +42,12 @@ app.add_middleware(
 # --- API Models (Pydantic for data validation) ---
 class ChatRequest(BaseModel):
     message: str
-    language: Optional[str] = "en" # NEW: Added optional language field
+    language: Optional[str] = "en" # Added optional language field
 
 class DocumentFillRequest(BaseModel):
     template_key: str
     filled_data: dict
-    language: Optional[str] = "en" # NEW: Added optional language field
+    language: Optional[str] = "en" # Added optional language field
 
 # --- API Endpoints ---
 
@@ -63,6 +63,7 @@ async def startup_event():
         print("Aleks API ready!")
     except Exception as e:
         print(f"Failed to initialize Aleks components: {e}. Please check your setup (Ollama, ChromaDB, etc.).")
+        traceback.print_exc() # NEW: Print traceback on startup failure
         raise # Re-raise the exception to indicate a critical startup failure
 
 @app.post("/api/chat")
@@ -139,7 +140,9 @@ async def chat_with_aleks(request: ChatRequest):
             rag_response = get_rag_response(user_message, user_language)
             return {"type": "rag_response", "response": rag_response["answer"], "sources": rag_response["sources"]}
         except Exception as e:
-            # Catch any error from RAG and return as HTTPException
+            # FIX: Print the full traceback for debugging
+            print(f"ERROR: Exception during RAG query processing: {e}")
+            traceback.print_exc() # NEW: Print full traceback to console/logs
             raise HTTPException(status_code=500, detail=f"Error processing RAG query: {e}")
 
 @app.post("/api/generate_document")
