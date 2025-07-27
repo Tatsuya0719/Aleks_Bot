@@ -1,8 +1,15 @@
-[[redirects]]
-  from = "/api/*"
-  to = "http://34.124.216.192:8000/:splat"
-  status = 200
-  force = true
-  # This will proxy requests from your Netlify domain's /api path
-  # to your backend. E.g., https://yoursite.netlify.app/api/chat
-  # will go to http://YOUR_GCP_VM_EXTERNAL_IP:8000/api/chat
+    # netlify.toml
+    # This file configures Netlify to proxy API requests from your frontend to your backend.
+
+    [[redirects]]
+      # This rule will capture any request to /api/ followed by anything else
+      from = "/api/*"
+      # This is the full URL of your GCP VM's FastAPI backend
+      # REPLACE 'YOUR_GCP_VM_EXTERNAL_IP' with the actual External IP of your VM
+      to = "http://34.124.216.192:8000/:splat"
+      # The status 200 means it's a proxy, so the browser thinks it's a direct response
+      status = 200
+      # force = true ensures this rule takes precedence
+      force = true
+      # headers = {X-From = "Netlify"} # Optional: Add a header to see if it's proxied
+    
