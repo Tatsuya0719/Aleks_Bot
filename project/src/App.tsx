@@ -97,7 +97,6 @@ function App() {
       setIsLoading(false);
       setMessages(prevMessages => 
         prevMessages.map(msg => 
-          // FIX: Removed an extra '}' here which caused the compilation error
           msg.isStreaming ? { ...msg, text: `Error: Failed to fetch. Please ensure the Aleks AI API server is running. (${error instanceof Error ? error.message : String(error)})`, isStreaming: false } : msg
         )
       );
@@ -105,16 +104,22 @@ function App() {
   };
 
   return (
-    // FIX: Removed bg-gradient-to-br from App.tsx's root div.
-    // The modal in index.html already provides the background and centering.
-    // This div now only defines the content's size and flex behavior within the modal.
-    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl flex flex-col h-[80vh] md:h-[90vh]"> 
+    // Changed background to a dark gray, removed p-6, and adjusted text color for contrast
+    <div className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col h-[80vh] md:h-[90vh] overflow-hidden"> 
       {/* Header */}
-      <div className="flex justify-between items-center pb-4 border-b border-gray-200">
-        <h1 className="text-2xl font-bold text-gray-800">Aleks - AI Legal Assistant</h1>
+      <div className="flex items-center p-4 border-b border-gray-700 bg-gray-900 text-white">
+        <img 
+          src="https://placehold.co/40x40/FFC107/FFFFFF?text=AI" 
+          alt="Aleks Avatar" 
+          className="w-10 h-10 rounded-full mr-3"
+        />
+        <div>
+          <h1 className="text-xl font-bold">Aleks - AI Legal Assistant</h1>
+          <p className="text-sm text-gray-400">Your Filipino Law Expert</p>
+        </div>
         <button 
           onClick={() => setMessages([])} 
-          className="text-gray-500 hover:text-gray-700 focus:outline-none"
+          className="ml-auto text-gray-400 hover:text-white focus:outline-none"
           aria-label="Clear chat"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -126,11 +131,11 @@ function App() {
       {/* Message Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 text-center">
+          <div className="flex flex-col items-center justify-center h-full text-gray-400 text-center">
             <p className="text-lg mb-2">Hi there! I am Aleks, your AI legal assistant for Filipino citizens. How can I help you today?</p>
             <button 
               onClick={() => handleSendMessage()} // This needs to be adjusted if it's meant to be a pre-defined message
-              className="px-4 py-2 bg-yellow-400 text-white rounded-lg hover:bg-yellow-500 transition-colors shadow"
+              className="px-4 py-2 bg-lexibot-yellow text-white rounded-lg hover:bg-lexibot-yellow-dark transition-colors shadow"
             >
               Try Aleks Now
             </button>
@@ -139,25 +144,44 @@ function App() {
         {messages.map((msg, index) => (
           <div
             key={index}
-            className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} items-start`}
           >
+            {msg.sender === 'aleks' && (
+              <img 
+                src="https://placehold.co/32x32/FFC107/FFFFFF?text=AI" 
+                alt="Aleks Avatar" 
+                className="w-8 h-8 rounded-full mr-2 mt-1"
+              />
+            )}
             <div
-              className={`max-w-[70%] px-4 py-2 rounded-lg shadow-md ${
+              className={`max-w-[75%] px-4 py-2 rounded-xl shadow-md ${
                 msg.sender === 'user'
-                  ? 'bg-orange-400 text-white'
-                  : 'bg-gray-100 text-gray-800'
+                  ? 'bg-orange-500 text-white rounded-br-none' // User message color, rounded-br-none for bubble shape
+                  : 'bg-gray-700 text-gray-100 rounded-bl-none' // Aleks message color, rounded-bl-none for bubble shape
               }`}
             >
               {msg.text}
               {msg.isStreaming && (
-                <span className="animate-pulse text-gray-500">_</span> // Simple blinking cursor
+                <span className="animate-pulse text-gray-400">_</span> // Simple blinking cursor
               )}
             </div>
+            {msg.sender === 'user' && (
+              <img 
+                src="https://placehold.co/32x32/6B7280/FFFFFF?text=You" 
+                alt="User Avatar" 
+                className="w-8 h-8 rounded-full ml-2 mt-1"
+              />
+            )}
           </div>
         ))}
         {isLoading && messages[messages.length - 1]?.sender !== 'aleks' && (
-          <div className="flex justify-start">
-            <div className="max-w-[70%] px-4 py-2 rounded-lg shadow-md bg-gray-100 text-gray-800">
+          <div className="flex justify-start items-start">
+            <img 
+                src="https://placehold.co/32x32/FFC107/FFFFFF?text=AI" 
+                alt="Aleks Avatar" 
+                className="w-8 h-8 rounded-full mr-2 mt-1"
+            />
+            <div className="max-w-[70%] px-4 py-2 rounded-xl shadow-md bg-gray-700 rounded-bl-none">
               <div className="flex space-x-1">
                 <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
                 <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
@@ -170,27 +194,43 @@ function App() {
       </div>
 
       {/* Input Area */}
-      <div className="pt-4 border-t border-gray-200 flex">
-        <input
-          type="text"
-          className="flex-1 p-3 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-yellow-400"
-          placeholder="Type your message..."
-          value={inputMessage}
-          onChange={(e) => setInputMessage(e.target.value)}
-          onKeyPress={(e) => {
-            if (e.key === 'Enter') {
-              handleSendMessage();
-            }
-          }}
-          disabled={isLoading}
-        />
-        <button
-          onClick={handleSendMessage}
-          className="px-6 py-3 bg-yellow-400 text-white rounded-r-lg hover:bg-yellow-500 transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-yellow-400"
-          disabled={isLoading}
-        >
-          Send
-        </button>
+      <div className="p-4 border-t border-gray-700 bg-gray-900">
+        <div className="flex items-center space-x-3">
+          <button className="text-gray-400 hover:text-lexibot-yellow focus:outline-none" aria-label="Attach file">
+            <i className="fas fa-paperclip text-xl"></i>
+          </button>
+          <button className="text-gray-400 hover:text-lexibot-yellow focus:outline-none" aria-label="Voice input">
+            <i className="fas fa-microphone text-xl"></i>
+          </button>
+          <input
+            type="text"
+            className="flex-1 p-3 border border-gray-600 bg-gray-700 text-white rounded-full focus:outline-none focus:ring-2 focus:ring-lexibot-yellow placeholder-gray-400"
+            placeholder="Type your message..."
+            value={inputMessage}
+            onChange={(e) => setInputMessage(e.target.value)}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                handleSendMessage();
+              }
+            }}
+            disabled={isLoading}
+          />
+          <button
+            onClick={handleSendMessage}
+            className="bg-lexibot-yellow hover:bg-lexibot-yellow-dark text-white p-3 rounded-full transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-lexibot-yellow"
+            disabled={!inputMessage.trim() || isLoading}
+            aria-label="Send message"
+          >
+            <i className="fas fa-paper-plane"></i>
+          </button>
+        </div>
+        {/* Loading and Error Indicators */}
+        {isLoading && (
+          <div id="loadingIndicator" className="text-center text-lexibot-yellow text-sm mt-2">
+            <i className="fas fa-spinner fa-spin mr-2"></i> Thinking...
+          </div>
+        )}
+        {/* Error message will be displayed within the chat bubble itself for streaming errors */}
       </div>
     </div>
   );
