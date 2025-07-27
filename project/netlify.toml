@@ -1,0 +1,8 @@
+[[redirects]]
+  from = "/api/*"
+  to = "http://34.124.216.192:8000/:splat"
+  status = 200
+  force = true
+  # This will proxy requests from your Netlify domain's /api path
+  # to your backend. E.g., https://yoursite.netlify.app/api/chat
+  # will go to http://YOUR_GCP_VM_EXTERNAL_IP:8000/api/chat
