@@ -7,11 +7,14 @@ import traceback
 # Core LangChain components for RAG - make sure these are the updated ones
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-from langchain_ollama import OllamaLLM 
+# REMOVED: from langchain_ollama import OllamaLLM 
 
-from langchain.chains import RetrievalQA
+# NEW: Import for Google Generative AI
+import google.generativeai as genai 
+
+# REMOVED: from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
-from langchain.chains import LLMChain 
+# REMOVED: from langchain.chains import LLMChain 
 
 # Import constants from document_manager
 from document_manager import DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS, TEMPLATE_DIR 
@@ -20,13 +23,18 @@ from document_manager import DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS, TEMPL
 CHROMA_DB_DIR = "./chroma_db"
 EMBEDDINGS_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
-# --- Ollama Configuration ---
-OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL_NAME = "phi3:mini"
+# --- REMOVED: Ollama Configuration ---
+# REMOVED: OLLAMA_BASE_URL = "http://localhost:11434"
+# REMOVED: OLLAMA_MODEL_NAME = "phi3:mini"
+
+# --- NEW: Gemini API Configuration ---
+# This will fetch the key from the environment variables set on your VM
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
+GEMINI_MODEL_NAME = "gemini-pro" # Or gemini-1.5-flash for faster/cheaper
 
 # Global variables for the AI components (will be initialized once)
 qa_chain = None
-llm = None
+llm = None # This will now be our Gemini model instance
 retriever = None # Make retriever global for direct testing if needed
 
 def initialize_aleks_components():
@@ -36,204 +44,155 @@ def initialize_aleks_components():
     """
     global qa_chain, llm, retriever # Add retriever to global
     print("Initializing Aleks AI components...")
-    
-    print("Loading embedding model for retrieval...")
+
+    # NEW: Configure Gemini API
+    if not GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY environment variable not set. Please set it on your VM before running the application.")
+    genai.configure(api_key=GEMINI_API_KEY)
+
+    # NEW: Initialize the Gemini model. This is now our 'llm'
+    llm = genai.GenerativeModel(GEMINI_MODEL_NAME)
+    print(f"Initialized LLM: Google Gemini ({GEMINI_MODEL_NAME})")
+
+    # Initialize Embeddings for RAG (keep HuggingFaceEmbeddings as is)
+    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDINGS_MODEL_NAME)
+    print(f"Initialized Embeddings model: {EMBEDDINGS_MODEL_NAME}")
+
+    # Initialize ChromaDB retriever
+    # This will load an existing DB or create a new one if it doesn't exist
     try:
-        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDINGS_MODEL_NAME)
-        print("Embedding model loaded.")
+        retriever = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings).as_retriever()
+        print(f"Loaded ChromaDB from {CHROMA_DB_DIR}")
     except Exception as e:
-        print(f"Error loading embedding model: {e}")
-        print("Please ensure 'langchain-huggingface' and 'torch' are installed.")
-        raise 
+        print(f"Error loading ChromaDB from {CHROMA_DB_DIR}: {e}")
+        print("Please ensure you have run 'python vector_db_creator.py' to create the vector database.")
+        retriever = None # Ensure retriever is None if loading fails
 
-    print(f"Loading vector database from {CHROMA_DB_DIR}...")
+    # REMOVED: Ollama LLM setup and RetrievalQA chain setup
+    # If using Ollama, your original code for llm = OllamaLLM(...) and RetrievalQA.from_chain_type(...)
+    # would go here. Now replaced by Gemini setup.
+
+    print("Aleks AI components initialized successfully!")
+
+# MODIFIED: get_rag_response function to use Gemini API
+async def get_rag_response(query: str):
+    global llm, retriever 
+
+    if llm is None or retriever is None:
+        await initialize_aleks_components() 
+
     try:
-        if not os.path.exists(CHROMA_DB_DIR):
-            print(f"Error: Chroma DB directory '{CHROMA_DB_DIR}' not found. Please ensure you have run the data ingestion script.")
-            raise 
-        vectorstore = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings)
-        print("Vector database loaded.")
-    except Exception as e:
-        print(f"Error loading vector database: {e}")
-        print("Please ensure 'langchain-chroma' is installed and your database exists.")
-        raise 
+        docs = retriever.invoke(query)
+        context_text = "\n\n".join([doc.page_content for doc in docs])
 
-    print("Initializing LLM...")
-    try:
-        llm = OllamaLLM( 
-            base_url=OLLAMA_BASE_URL,
-            model=OLLAMA_MODEL_NAME,
-            temperature=0.1,
-            verbose=True, # For more debugging output from LangChain
-        )
-        print(f"Using local LLM via Ollama: {OLLAMA_MODEL_NAME}")
-    except Exception as e:
-        print(f"Error initializing Local LLM via Ollama: {e}")
-        print("Please ensure Ollama is installed, the model is pulled, and the Ollama server is running, and 'langchain-ollama' is installed.")
-        raise 
+        # Define rag_template inside the function or globally if it's not already
+        rag_template = """You are Aleks, an AI legal assistant knowledgeable in Philippine law.
+        Use the following pieces of retrieved context to answer the question.
+        If you don't know the answer, just say that you don't have enough information from the provided legal documents.
+        Limit your answer to 200 words.
 
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+        Context: {context}
 
-    # Custom RAG Prompt Template 
-    rag_template = """You are Aleks, an AI legal assistant specializing in Philippine law.
-Use the following pieces of context to answer the user's question.
-If you don't know the answer, just say that you don't know, don't try to make up an answer.
-Always answer in English.
+        Question: {question}
 
-Context: {context}
-Question: {question}
-
-Helpful Answer:"""
-    RAG_PROMPT_CUSTOM = PromptTemplate.from_template(rag_template)
-
-
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        chain_type="stuff",
-        retriever=retriever,
-        return_source_documents=True,
-        # REMOVED: chain_type_kwargs={"prompt": RAG_PROMPT_CUSTOM} 
-    )
-    print("Aleks AI components loaded successfully!")
-
-# MODIFIED: get_rag_response no longer accepts language
-def get_rag_response(query: str) -> dict:
-    """
-    Performs RAG query using the initialized qa_chain.
-    """
-    if qa_chain is None:
-        raise RuntimeError("Aleks components not initialized. Call initialize_aleks_components first.")
-    
-    # DEBUG: print statements for more visibility and timing
-    print(f"DEBUG: Invoking RAG chain with query: '{query}'") 
-    
-    try: 
-        print("DEBUG: Before qa_chain.invoke - attempting RAG process...") 
+        Answer in Filipino unless the question is in English. If the question is in English, answer in English.
+        """
+        rag_prompt_template = PromptTemplate.from_template(rag_template)
         
-        # --- Start timing for retrieval ---
-        retrieval_start_time = datetime.now()
-        print(f"DEBUG: Starting document retrieval... (Time: {retrieval_start_time.strftime('%H:%M:%S.%f')})") 
-        
-        # The qa_chain.invoke implicitly calls the retriever first, then the LLM.
-        # We need to explicitly call retriever for accurate timing.
-        
-        # Step 1: Document Retrieval
-        retrieved_docs = retriever.get_relevant_documents(query)
-        retrieval_end_time = datetime.now()
-        retrieval_duration = (retrieval_end_time - retrieval_start_time).total_seconds()
-        print(f"DEBUG: Document retrieval completed. Found {len(retrieved_docs)} documents in {retrieval_duration:.2f} seconds.")
-        # If this point is reached quickly, the hang is in the LLM part
+        # Prepare content for Gemini API
+        prompt_parts = [
+            {"text": rag_prompt_template.format(context=context_text, question=query)}
+        ]
 
-        # Step 2: LLM Generation with retrieved context
-        print(f"DEBUG: Starting LLM generation with context... (Time: {retrieval_end_time.strftime('%H:%M:%S.%f')})") # This is retrieval_end_time which is start of LLM
-        
-        # Manually create the input for the LLM based on retrieved docs
-        context_text = "\n\n".join([doc.page_content for doc in retrieved_docs])
-        
-        # Reconstruct the prompt template with context and question
-        llm_prompt = PromptTemplate.from_template(
-            """You are Aleks, an AI legal assistant specializing in Philippine law.
-Use the following pieces of context to answer the user's question.
-If you don't know the answer, just say that you don't know, don't try to make up an answer.
-Always answer in English.
+        print(f"Sending prompt to Gemini: {prompt_parts[0]['text'][:200]}...") 
 
-Context: {context}
-Question: {question}
-
-Helpful Answer:"""
+        response = await llm.generate_content(
+            prompt_parts,
+            safety_settings=[
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            ],
+            generation_config={"temperature": 0.1, "max_output_tokens": 400} 
         )
         
-        llm_chain = LLMChain(prompt=llm_prompt, llm=llm)
-        
-        llm_generation_start_time = datetime.now() # More accurate start time for LLM
-        
-        # Pass context and query to the LLM chain
-        response_from_llm_chain = llm_chain.invoke({"context": context_text, "question": query})
-        
-        llm_generation_end_time = datetime.now()
-        llm_generation_duration = (llm_generation_end_time - llm_generation_start_time).total_seconds()
-        print(f"DEBUG: LLM generation completed in {llm_generation_duration:.2f} seconds.")
-        
-        # Combine the results as RetrievalQA would
-        final_result = response_from_llm_chain['text'] # Assuming LLMChain returns text in 'text' key
-        
-        # Format source documents nicely for API response
-        sources_info = []
-        if retrieved_docs: # Use retrieved_docs directly here
-            for i, doc in enumerate(retrieved_docs):
-                source_name = doc.metadata.get('source', 'Unknown Document')
-                start_index = doc.metadata.get('start_index', 'N/A')
-                sources_info.append({
-                    "source": source_name,
-                    "startIndex": start_index,
-                    "snippet": doc.page_content[:200] + "..." 
-                })
+        generated_text = response.text
+        print(f"Received response from Gemini: {generated_text[:200]}...")
 
         return {
-            "answer": final_result,
-            "sources": sources_info
+            "response": generated_text,
+            "sources": [{"source": doc.metadata.get("source", "N/A"), "startIndex": "N/A", "snippet": doc.page_content[:200]} for doc in docs]
         }
 
     except Exception as e:
-        print(f"CRITICAL ERROR IN RAG CHAIN INVOCATION: {e}")
-        traceback.print_exc() 
-        raise 
+        print(f"CRITICAL ERROR IN RAG RESPONSE (Gemini API): {e}")
+        traceback.print_exc()
+        return {
+            "response": "I apologize, but I encountered an issue while processing your request. Please try again or rephrase your question.",
+            "sources": []
+        }
 
-def detect_document_request(query: str) -> str:
-    """
-    Uses an LLM to determine if the query is a request for a document template
-    and identifies which document type.
-    """
+# MODIFIED: detect_document_request function to use Gemini API
+async def detect_document_request(query: str, template_names: list):
+    global llm 
+
     if llm is None:
-        raise RuntimeError("Aleks components not initialized. Call initialize_aleks_components first.")
+        await initialize_aleks_components() 
 
-    template_names = ", ".join(DOCUMENT_TEMPLATES.keys())
-    
-    # Document detection prompt
-    prompt_template = PromptTemplate(
-        input_variables=["query", "template_names"], 
-        template="""You are an AI assistant. Analyze the user's query to determine if they are asking for a legal document template.
-If they are, identify which specific document they are asking for from the following types: {template_names}.
-If you identify a document, respond ONLY with the document type (e.g., "nda", "non-disclosure agreement").
-If the query is NOT a document request, respond ONLY with "NONE".
-Always respond in English if you need to clarify, otherwise just the document type or NONE.
+    formatted_template_names = ", ".join(template_names)
 
-Examples:
-User: I need an NDA.
-Response: nda
+    # Simplified prompt for classification with Gemini
+    prompt_text = f"""You are Aleks, an AI assistant specializing in identifying requests for legal document templates.
+    Review the user's query and determine if they are asking for a legal document template.
+    If they are, identify which specific document they are asking for from the following types: {formatted_template_names}.
+    If you identify a document, respond ONLY with the exact document type from the provided list (e.g., "nda", "non-disclosure agreement").
+    If the query is NOT a document request, respond ONLY with "NONE".
+    Do not add any other text, greetings, or explanations to your response.
 
-User: Can you help me draft a non-disclosure agreement?
-Response: non-disclosure agreement
+    Examples:
+    User: I need an NDA.
+    Response: nda
 
-User: What are the tax requirements for a new business?
-Response: NONE
+    User: Can you help me draft a non-disclosure agreement?
+    Response: non-disclosure agreement
 
-User: Draft a simple contract.
-Response: NONE
+    User: What are the tax requirements for a new business?
+    Response: NONE
 
-User: Kailangan ko ng NDA. (I need an NDA.)
-Response: nda
+    User: Draft a simple contract.
+    Response: NONE
 
-Query: {query}
-Response:""" 
-    )
+    User: Kailangan ko ng NDA. (I need an NDA.)
+    Response: nda
 
-    llm_chain = LLMChain(prompt=prompt_template, llm=llm)
-    
-    # Temporarily adjust temperature for classification task
-    original_temperature = llm.temperature
-    llm.temperature = 0.3
-    try: 
-        # Pass only 'query' and 'template_names' to invoke
-        response = llm_chain.invoke({"query": query, "template_names": template_names}) 
+    Query: {query}
+    Response:"""
+
+    try:
+        response = await llm.generate_content(
+            [{"text": prompt_text}],
+            safety_settings=[
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            ],
+            generation_config={
+                "temperature": 0.0, # Keep temperature low for deterministic classification
+                "max_output_tokens": 50 # Limit output length
+            }
+        )
+        
+        detected_document_type = response.text.strip().lower()
+
+        # Basic validation: ensure the response is one of the expected types or "none"
+        if detected_document_type not in template_names and detected_document_type != "none":
+            print(f"Warning: Gemini returned an unexpected document type: '{detected_document_type}'. Returning NONE.")
+            return "NONE" 
+        
+        return detected_document_type
     except Exception as e:
-        print(f"CRITICAL ERROR IN LLMCHAIN INVOCATION (Document Detection): {e}")
-        traceback.print_exc() 
-        raise 
-    llm.temperature = original_temperature
-
-    detected_type = response['text'].strip().lower()
-
-    if detected_type in DOCUMENT_TEMPLATES:
-        return detected_type
-    return "NONE"
+        print(f"CRITICAL ERROR IN DOCUMENT DETECTION (Gemini API): {e}")
+        traceback.print_exc()
+        return "NONE"
