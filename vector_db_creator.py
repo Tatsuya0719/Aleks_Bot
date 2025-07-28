@@ -27,7 +27,7 @@ BATCH_SIZE = 10 # Number of chunks to process in one LLM call for tagging
 
 # --- Ollama Configuration for Tagging ---
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL_NAME = "mistral" # Changed from "phi3:mini" to "mistral"
+OLLAMA_MODEL_NAME = "llama2:7b-chat-q4_0" # Changed from "mistral" to a potentially faster Llama2 quantized model
 
 # Define a comprehensive list of potential tags based on your legal documents
 # This list will be provided to the LLM to guide its tag generation.
@@ -82,10 +82,10 @@ def generate_tags_for_batch(llm_tagger, chunks: list) -> list:
     for i, chunk in enumerate(chunks):
         batch_prompt_content += f"Chunk {i+1} (ID: chunk_{i}):\n---\n{chunk.page_content}\n---\n\n"
 
-    # MODIFIED PROMPT: Even stronger emphasis on JSON, and a clear instruction to only output JSON
+    # MODIFIED PROMPT: Explicitly ask for ALL relevant tags
     tagging_prompt_template = PromptTemplate(
         input_variables=["batch_content", "tag_list"],
-        template=f"""You are a highly precise AI assistant. Your task is to identify relevant legal topics for each provided text chunk from the given list of tags.
+        template=f"""You are a highly precise AI assistant. Your task is to identify ALL relevant legal topics for each provided text chunk from the given list of tags.
         You MUST return your response as a valid JSON array. Each object in the array MUST have a 'chunk_id' (e.g., 'chunk_0', 'chunk_1') and a 'tags' array.
         If no tags are relevant for a chunk, its 'tags' array MUST be empty.
         DO NOT include any introductory text, conversational phrases, explanations, or anything outside the JSON array.
