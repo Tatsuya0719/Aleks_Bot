@@ -46,21 +46,15 @@ ALL_POSSIBLE_TAGS = [
 
 def extract_tags_from_filename(filename: str) -> list:
     """
-    Extracts tags from a filename based on the convention:
-    [OriginalFileName]_[tag1]_[tag2]..._tagN.pdf
+    Extracts tags from a filename by checking for the presence of ALL_POSSIBLE_TAGS
+    as substrings in the lowercase filename.
     """
-    # Remove .pdf extension
-    base_name = os.path.splitext(filename)[0]
-    
-    # Split by underscore
-    parts = base_name.split('_')
-    
-    # Tags are expected at the end, after the main filename parts.
-    # We'll assume any part that matches one of our ALL_POSSIBLE_TAGS is a tag.
     extracted_tags = []
-    for part in parts:
-        if part.lower() in ALL_POSSIBLE_TAGS:
-            extracted_tags.append(part.lower())
+    lower_filename = filename.lower()
+    for tag in ALL_POSSIBLE_TAGS:
+        # Check if the full tag string is present in the filename
+        if tag in lower_filename:
+            extracted_tags.append(tag)
             
     # Return unique tags
     return list(set(extracted_tags))
@@ -88,7 +82,7 @@ def create_vector_db():
 
             try:
                 loader = PyPDFLoader(filepath)
-                loaded_docs = loader.load()
+                loaded_docs = loader.load() # This returns a list of Document objects
                 
                 for doc in loaded_docs:
                     # Basic cleaning: remove extra newlines and leading/trailing whitespace
@@ -114,9 +108,9 @@ def create_vector_db():
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
     
     all_chunks = []
-    for doc in documents:
+    for doc in documents: # 'doc' here is a Document object
         # Split each document into its own chunks, carrying over metadata (including tags)
-        doc_chunks = text_splitter.split_documents([doc])
+        doc_chunks = text_splitter.split_documents([doc]) # This returns a list of Document objects
         for chunk in doc_chunks:
             # Ensure chunk metadata includes source and tags from the parent document
             if not hasattr(chunk, 'metadata'):
@@ -149,10 +143,14 @@ def create_vector_db():
             print("Existing ChromaDB removed.")
 
         # NEW: Filter complex metadata before sending to ChromaDB
-        # This will convert the list of tags into a format ChromaDB can handle for filtering
         processed_chunks = []
         for chunk in all_chunks:
-            # Ensure the 'tags' metadata is processed by filter_complex_metadata
+            # DEBUG: Explicitly check type before processing metadata
+            if not isinstance(chunk, Document):
+                print(f"CRITICAL ERROR: Expected Document object but got type {type(chunk)} for chunk: {chunk.page_content[:50]}...")
+                print("Skipping this chunk to prevent metadata error. This indicates an issue in document loading or splitting.")
+                continue # Skip this chunk if it's not a Document object
+
             chunk.metadata = filter_complex_metadata(chunk.metadata)
             processed_chunks.append(chunk)
 
@@ -165,6 +163,8 @@ def create_vector_db():
         print("ChromaDB created and populated successfully with file-name-based tags!")
     except Exception as e:
         print(f"Error creating ChromaDB: {e}")
+        # Print full traceback for more context on the error
+        traceback.print_exc() 
         print("Please ensure 'langchain-chroma' is installed.")
 
 
