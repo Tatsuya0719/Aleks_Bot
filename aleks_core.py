@@ -56,7 +56,7 @@ def initialize_aleks_components():
             print(f"WARNING: Chroma DB directory '{CHROMA_DB_DIR}' not found. Please run 'python vector_db_creator.py' to create it.")
             retriever = None
         else:
-            retriever = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings).as_retriever(search_kwargs={"k": 3}) 
+            retriever = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings).as_retriever(search_kwargs={"k": 5}) 
             print(f"Loaded ChromaDB from {CHROMA_DB_DIR}")
     except Exception as e:
         print(f"Error loading ChromaDB from {CHROMA_DB_DIR}: {e}")
