@@ -21,7 +21,6 @@ CHROMA_DB_DIR = "./chroma_db"
 EMBEDDINGS_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 # --- NEW: Gemini API Configuration ---
-# This will fetch the key from the environment variables set on your VM
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
 GEMINI_MODEL_NAME = "gemini-1.5-flash" 
 
@@ -29,7 +28,6 @@ GEMINI_MODEL_NAME = "gemini-1.5-flash"
 llm = None 
 retriever = None 
 
-# MODIFIED: Removed 'async' keyword
 def initialize_aleks_components(): 
     """
     Initializes the RAG components and the LLM (Gemini), making them globally accessible for API endpoints.
@@ -38,25 +36,21 @@ def initialize_aleks_components():
     global llm, retriever 
     print("Initializing Aleks AI components...")
 
-    # NEW: Configure Gemini API
     if not GEMINI_API_KEY:
         raise ValueError("GEMINI_API_KEY environment variable not set. Please set it on your VM before running the application.")
     genai.configure(api_key=GEMINI_API_KEY)
 
-    # NEW: Initialize the Gemini model. This is now our 'llm'
     try:
         llm = genai.GenerativeModel(GEMINI_MODEL_NAME)
         print(f"Initialized LLM: Google Gemini ({GEMINI_MODEL_NAME})")
     except Exception as e:
         print(f"CRITICAL ERROR: Failed to initialize Gemini model '{GEMINI_MODEL_NAME}'. Check model availability and API key: {e}")
         traceback.print_exc()
-        raise # Re-raise to prevent app from starting without a working LLM
+        raise 
 
-    # Initialize Embeddings for RAG (keep HuggingFaceEmbeddings as is)
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDINGS_MODEL_NAME)
     print(f"Initialized Embeddings model: {EMBEDDINGS_MODEL_NAME}")
 
-    # Initialize ChromaDB retriever
     try:
         if not os.path.exists(CHROMA_DB_DIR):
             print(f"WARNING: Chroma DB directory '{CHROMA_DB_DIR}' not found. Please run 'python vector_db_creator.py' to create it.")
@@ -71,11 +65,9 @@ def initialize_aleks_components():
 
     print("Aleks AI components initialized successfully!")
 
-# MODIFIED: Removed 'async' keyword and 'await' calls
 def get_rag_response(query: str, language: str = "en") -> dict: 
     global llm, retriever 
 
-    # MODIFIED: Call initialize_aleks_components synchronously
     if llm is None or retriever is None:
         initialize_aleks_components() 
 
@@ -91,10 +83,11 @@ def get_rag_response(query: str, language: str = "en") -> dict:
         context_text = "\n\n".join([doc.page_content for doc in docs])
         print(f"DEBUG: Retrieved {len(docs)} documents.")
 
+        # MODIFIED RAG PROMPT: Added instruction to explicitly state if information is insufficient
         rag_template = """You are Aleks, an AI legal assistant knowledgeable in Philippine law.
-        Use the following pieces of retrieved context to answer the question.
-        If you don't know the answer, just say that you don't have enough information from the provided legal documents.
-        Limit your answer to 200 words.
+        Your goal is to provide accurate and helpful information based ONLY on the provided context.
+        If the context does not contain enough information to answer the question fully, clearly state that you do not have enough information from the provided documents. Do not make up information.
+        Limit your answer to 200 words. Also, if the information is limited or the question is too complex for you to answer, state that "I can also help in refering you to our partner law firms"
 
         Context: {context}
 
@@ -110,7 +103,6 @@ def get_rag_response(query: str, language: str = "en") -> dict:
 
         print(f"DEBUG: Sending prompt to Gemini: {prompt_parts[0]['text'][:200]}...") 
 
-        # MODIFIED: Removed 'await' keyword
         response = llm.generate_content(
             prompt_parts,
             safety_settings=[
@@ -148,11 +140,9 @@ def get_rag_response(query: str, language: str = "en") -> dict:
             "sources": []
         }
 
-# MODIFIED: Removed 'async' keyword and 'await' calls
 def detect_document_request(query: str, template_names: list, language: str = "en") -> str: 
     global llm 
 
-    # MODIFIED: Call initialize_aleks_components synchronously
     if llm is None:
         initialize_aleks_components() 
 
@@ -185,7 +175,6 @@ def detect_document_request(query: str, template_names: list, language: str = "e
     Response:"""
 
     try:
-        # MODIFIED: Removed 'await' keyword
         response = llm.generate_content(
             [{"text": prompt_text}],
             safety_settings=[
