@@ -82,12 +82,13 @@ def generate_tags_for_batch(llm_tagger, chunks: list) -> list:
     for i, chunk in enumerate(chunks):
         batch_prompt_content += f"Chunk {i+1} (ID: chunk_{i}):\n---\n{chunk.page_content}\n---\n\n"
 
+    # MODIFIED PROMPT: Emphasize JSON format and start with JSON opening bracket
     tagging_prompt_template = PromptTemplate(
         input_variables=["batch_content", "tag_list"],
         template=f"""For each of the following text chunks, identify the most relevant legal topics or categories from this list: {tag_list_str}.
         Return ONLY the relevant tags for each chunk in a JSON array, where each object has a 'chunk_id' (e.g., 'chunk_0', 'chunk_1') and a 'tags' array.
         If no tags are relevant for a chunk, its 'tags' array should be empty.
-        Do not include any other text or explanation outside the JSON.
+        Your response MUST be a valid JSON array and contain NOTHING else. Start your response with '['.
 
         {batch_prompt_content}
 
