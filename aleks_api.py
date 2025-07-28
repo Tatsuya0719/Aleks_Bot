@@ -10,7 +10,6 @@ from typing import Optional
 import traceback 
 
 # Import core Aleks functions and constants from the refactored files
-# MODIFIED: initialize_aleks_components, get_rag_response, detect_document_request are now synchronous
 from aleks_core import initialize_aleks_components, get_rag_response, detect_document_request
 from document_manager import DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS, TEMPLATE_DIR 
 
@@ -47,14 +46,14 @@ class DocumentFillRequest(BaseModel):
 # --- API Endpoints ---
 
 @app.on_event("startup")
-def startup_event(): # MODIFIED: Removed 'async' keyword
+def startup_event(): 
     """
     Initializes Aleks components when the FastAPI application starts.
     This ensures the LLM and vector store are loaded once.
     """
     print("Starting up Aleks API...")
     try:
-        initialize_aleks_components() # MODIFIED: Removed 'await' keyword
+        initialize_aleks_components() 
         print("Aleks API ready!")
     except Exception as e:
         print(f"Failed to initialize Aleks components: {e}. Please check your setup (Gemini API key, ChromaDB, etc.).")
@@ -62,7 +61,7 @@ def startup_event(): # MODIFIED: Removed 'async' keyword
         raise 
 
 @app.post("/api/chat")
-async def chat_with_aleks(request: ChatRequest): # Keep this async because FastAPI expects async for route handlers
+async def chat_with_aleks(request: ChatRequest): 
     """
     Main chat endpoint. Detects document requests or performs RAG.
     """
@@ -73,12 +72,15 @@ async def chat_with_aleks(request: ChatRequest): # Keep this async because FastA
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
     # 1. Detect if it's a document request
-    # MODIFIED: Removed 'await' keyword
     detected_doc_type = detect_document_request(user_message, list(DOCUMENT_TEMPLATES.keys()), user_language)
 
-    if detected_doc_type != "NONE":
+    # FIX: Corrected conditional logic.
+    # If a valid document type is detected (i.e., NOT "NONE"), then proceed with document request flow.
+    # Otherwise (if detected_doc_type IS "NONE"), proceed directly to RAG.
+    if detected_doc_type != "NONE" and detected_doc_type in DOCUMENT_TEMPLATES:
         template_filename = DOCUMENT_TEMPLATES.get(detected_doc_type)
         if not template_filename:
+            # This case should ideally not be reached if detected_doc_type is already validated against DOCUMENT_TEMPLATES
             return {"type": "text", "response": f"Sorry, I don't have a template for '{detected_doc_type}'."}
 
         template_path = os.path.join(TEMPLATE_DIR, template_filename)
@@ -112,9 +114,8 @@ async def chat_with_aleks(request: ChatRequest): # Keep this async because FastA
             "placeholders_to_fill": placeholder_details
         }
     else:
-        # 2. Perform RAG query
+        # 2. If not a document request (or if document type is not valid), proceed with RAG query
         try:
-            # MODIFIED: Removed 'await' keyword
             rag_response = get_rag_response(user_message, user_language)
             return {"type": "rag_response", "response": rag_response["response"], "sources": rag_response["sources"]}
         except Exception as e:
@@ -123,7 +124,7 @@ async def chat_with_aleks(request: ChatRequest): # Keep this async because FastA
             raise HTTPException(status_code=500, detail=f"Error processing RAG query: {e}")
 
 @app.post("/api/generate_document")
-async def generate_document(request: DocumentFillRequest): # Keep this async for FastAPI route handler
+async def generate_document(request: DocumentFillRequest): 
     """
     Generates the final document after all placeholders are filled.
     """
