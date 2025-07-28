@@ -23,8 +23,8 @@ EMBEDDINGS_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L1
 # --- NEW: Gemini API Configuration ---
 # This will fetch the key from the environment variables set on your VM
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
-# FIX: Changed model name from "gemini-pro" to "gemini-1.0-pro" for better compatibility
-GEMINI_MODEL_NAME = "gemini-1.0-pro" # Or "gemini-1.5-flash" if you prefer faster/cheaper inference
+# FIX: Changed model name from "gemini-1.0-pro" to "gemini-1.5-flash"
+GEMINI_MODEL_NAME = "gemini-1.5-flash" 
 
 # Global variables for the AI components (will be initialized once)
 llm = None 
@@ -44,8 +44,13 @@ async def initialize_aleks_components():
     genai.configure(api_key=GEMINI_API_KEY)
 
     # NEW: Initialize the Gemini model. This is now our 'llm'
-    llm = genai.GenerativeModel(GEMINI_MODEL_NAME)
-    print(f"Initialized LLM: Google Gemini ({GEMINI_MODEL_NAME})")
+    try:
+        llm = genai.GenerativeModel(GEMINI_MODEL_NAME)
+        print(f"Initialized LLM: Google Gemini ({GEMINI_MODEL_NAME})")
+    except Exception as e:
+        print(f"CRITICAL ERROR: Failed to initialize Gemini model '{GEMINI_MODEL_NAME}'. Check model availability and API key: {e}")
+        traceback.print_exc()
+        raise # Re-raise to prevent app from starting without a working LLM
 
     # Initialize Embeddings for RAG (keep HuggingFaceEmbeddings as is)
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDINGS_MODEL_NAME)
