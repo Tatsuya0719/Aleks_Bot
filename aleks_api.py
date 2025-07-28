@@ -6,7 +6,7 @@ import uvicorn
 import os
 import re
 from datetime import datetime
-# Removed: from typing import Optional # No longer needed if language is removed
+from typing import Optional # Keep Optional for now, though language is now required
 import traceback 
 
 # Import core Aleks functions and constants from the refactored files
@@ -22,13 +22,8 @@ app = FastAPI(
 )
 
 # --- CORS Configuration ---
-# IMPORTANT: For production, change "*" to your specific Netlify URL (e.g., "https://your-site.netlify.app")
 origins = [
     "*" # Temporarily allow all origins for debugging. CHANGE THIS FOR PRODUCTION!
-    # "http://localhost",
-    # "http://localhost:5173",
-    # "http://10.147.18.65:5173", # Your Host Machine's ZeroTier IP and frontend port
-    # "https://YOUR-NETLIFY-SITE-NAME.netlify.app", # <--- ADD YOUR ACTUAL NETLIFY URL HERE
 ]
 
 app.add_middleware(
@@ -42,12 +37,12 @@ app.add_middleware(
 # --- API Models (Pydantic for data validation) ---
 class ChatRequest(BaseModel):
     message: str
-    # Removed: language: Optional[str] = "en"
+    language: str = "en" # NEW: Add language parameter to request
 
 class DocumentFillRequest(BaseModel):
     template_key: str
     filled_data: dict
-    # Removed: language: Optional[str] = "en"
+    # Removed: language: Optional[str] = "en" # Language not directly needed for document generation
 
 # --- API Endpoints ---
 
@@ -59,10 +54,10 @@ async def startup_event():
     """
     print("Starting up Aleks API...")
     try:
-        initialize_aleks_components()
+        await initialize_aleks_components() # MODIFIED: Await the async initialization
         print("Aleks API ready!")
     except Exception as e:
-        print(f"Failed to initialize Aleks components: {e}. Please check your setup (Ollama, ChromaDB, etc.).")
+        print(f"Failed to initialize Aleks components: {e}. Please check your setup (Gemini API key, ChromaDB, etc.).")
         traceback.print_exc() 
         raise 
 
@@ -72,31 +67,28 @@ async def chat_with_aleks(request: ChatRequest):
     Main chat endpoint. Detects document requests or performs RAG.
     """
     user_message = request.message.strip()
-    # Removed: user_language = request.language 
+    user_language = request.language # NEW: Get language from request
 
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
     # 1. Detect if it's a document request
-    # Removed: Pass the language to the detection function
-    detected_doc_type = detect_document_request(user_message)
+    # MODIFIED: Await the async function and pass language and template_names
+    detected_doc_type = await detect_document_request(user_message, list(DOCUMENT_TEMPLATES.keys()), user_language)
 
     if detected_doc_type != "NONE":
         template_filename = DOCUMENT_TEMPLATES.get(detected_doc_type)
         if not template_filename:
-            # Removed localized response for missing template
             return {"type": "text", "response": f"Sorry, I don't have a template for '{detected_doc_type}'."}
 
         template_path = os.path.join(TEMPLATE_DIR, template_filename)
         if not os.path.exists(template_path):
-            # Removed localized response for missing template file
             return {"type": "text", "response": f"Sorry, the template file for '{detected_doc_type}' could not be found."}
 
         try:
             with open(template_path, 'r', encoding='utf-8') as f:
                 template_content = f.read()
         except Exception as e:
-            # Removed localized response for template read error
             return {"type": "text", "response": f"Error reading template: {e}"}
 
         # Extract placeholders from the template
@@ -113,7 +105,6 @@ async def chat_with_aleks(request: ChatRequest):
             description = PLACEHOLDER_DESCRIPTIONS.get(p, p.replace('_', ' ').title())
             placeholder_details.append({"name": p, "description": description})
         
-        # Removed localized message for document request
         return {
             "type": "document_request",
             "document_type": detected_doc_type,
@@ -123,9 +114,10 @@ async def chat_with_aleks(request: ChatRequest):
     else:
         # 2. Perform RAG query
         try:
-            # Removed: Pass the language to the RAG function
-            rag_response = get_rag_response(user_message)
-            return {"type": "rag_response", "response": rag_response["answer"], "sources": rag_response["sources"]}
+            # MODIFIED: Await the async function and pass language
+            rag_response = await get_rag_response(user_message, user_language)
+            # MODIFIED: Use 'response' key from rag_response
+            return {"type": "rag_response", "response": rag_response["response"], "sources": rag_response["sources"]}
         except Exception as e:
             print(f"ERROR: Exception during RAG query processing: {e}")
             traceback.print_exc() 
@@ -138,7 +130,6 @@ async def generate_document(request: DocumentFillRequest):
     """
     template_key = request.template_key
     filled_data = request.filled_data
-    # Removed: user_language = request.language 
 
     template_filename = DOCUMENT_TEMPLATES.get(template_key)
     if not template_filename:
@@ -174,9 +165,9 @@ async def generate_document(request: DocumentFillRequest):
         print(f"Error saving document: {e}")
         raise HTTPException(status_code=500, detail=f"Error saving document: {e}")
 
-    # Removed localized success message
     return {
         "status": "success",
         "message": f"Document '{output_filename}' generated and saved.",
         "generated_document_preview": filled_document # Provide a preview for the frontend
     }
+
