@@ -25,8 +25,9 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center py-4">
                 <div class="flex items-center">
-                    <i class="fas fa-robot text-lexibot-yellow text-3xl mr-3"></i>
-                    <h1 class="text-2xl font-bold text-gray-800">Aleks</h1>
+                    <!-- Replaced robot icon and Aleks text with a logo image -->
+                    <!-- Updated src to reference a logo in the same folder -->
+                    <img src="logo.png" alt="Aleks Logo" class="h-10 mr-3">
                 </div>
                 <div class="hidden md:flex space-x-8">
                     <a href="#home" class="text-gray-600 hover:text-lexibot-yellow-dark transition duration-300" data-en="Home" data-fil="Tahanan">Home</a>
@@ -115,7 +116,7 @@
                         <ul class="text-sm text-gray-500 space-y-2">
                             <li data-en="✓ Templates available" data-fil="✓ May mga templates">✓ Templates available</li>
                             <li data-en="✓ PH law compliant" data-fil="✓ Sumusunod sa batas ng PH">✓ PH law compliant</li>
-                            <li data-en="✓ Instant generation" data-fil="✓ Instant na pagbuo">✓ Instant generation</li>
+                            <li class="flex items-center"><i class="fas fa-check-circle text-lexibot-yellow mr-3"></i> <span data-en="Instant generation" data-fil="✓ Instant na pagbuo">Instant generation</span></li>
                         </ul>
                     </div>
                 </div>
@@ -239,9 +240,9 @@
                     <div>
                         <p class="absolute -top-4 left-1/2 -translate-x-1/2 bg-lexibot-yellow text-white text-xs font-bold px-3 py-1 rounded-full uppercase" data-en="Most Popular" data-fil="Pinaka Sikat">Most Popular</p>
                         <h3 class="text-2xl font-bold text-gray-800 mb-4" data-en="Pro Plan" data-fil="Pro Plan">Pro Plan</h3>
-                        <p class="text-gray-600 mb-6" data-en="Ideal for growing MSMEs and active freelancers." data-fil="Ideal para sa lumalaking MSMEs at aktibong freelancer.">Ideal for growing MSMEs and active freelancers.</p>
+                        <p class="text-gray-600 mb-6" data-en="Ideal for growing MSMEs and active freelancers." data-fil="Ideal para sa lumalaking MSMEs at aktibong freelancer.">Ideal for growing MSMEs and aktibong freelancer.</p>
                         <div class="text-4xl font-bold text-lexibot-yellow-dark mb-6">
-                            <span data-en="₱199" data-fil="₱199">₱199</span><span class="text-xl text-gray-500 font-normal" data-en="/month" data-fil="/buwan">/month</span>
+                            <span data-en="₱799" data-fil="₱799">₱799</span><span class="text-xl text-gray-500 font-normal" data-en="/month" data-fil="/buwan">/month</span>
                         </div>
                         <ul class="text-gray-700 space-y-3 mb-8">
                             <li class="flex items-center"><i class="fas fa-check-circle text-lexibot-yellow mr-3"></i> <span data-en="Unlimited Chatbot Queries" data-fil="Unlimited na Chatbot Queries">Unlimited Chatbot Queries</span></li>
@@ -260,7 +261,7 @@
                         <h3 class="text-2xl font-bold text-gray-800 mb-4" data-en="Premium Plan" data-fil="Premium Plan">Premium Plan</h3>
                         <p class="text-gray-600 mb-6" data-en="For established businesses needing comprehensive legal support." data-fil="Para sa mga established na negosyo na nangangailangan ng komprehensibong legal na suporta.">For established businesses needing comprehensive legal support.</p>
                         <div class="text-4xl font-bold text-lexibot-yellow-dark mb-6">
-                            <span data-en="₱499" data-fil="₱499">₱499</span><span class="text-xl text-gray-500 font-normal" data-en="/month" data-fil="/buwan">/month</span>
+                            <span data-en="₱1,999" data-fil="₱1,999">₱1,999</span><span class="text-xl text-gray-500 font-normal" data-en="/month" data-fil="/buwan">/month</span>
                         </div>
                         <ul class="text-gray-700 space-y-3 mb-8">
                             <li class="flex items-center"><i class="fas fa-check-circle text-lexibot-yellow mr-3"></i> <span data-en="All Pro Plan Features" data-fil="Lahat ng Pro Plan Features">All Pro Plan Features</span></li>
@@ -454,8 +455,7 @@
             <div id="ai-chatbot-root" class="flex-1 overflow-auto">
                 </div>
         </div>
-    </div>
-    
+    </div
 <script type="module" src="/src/main.tsx"></script>
     <script>
         // Language Toggle functionality (existing, kept as is)
