@@ -7,14 +7,11 @@ import traceback
 # Core LangChain components for RAG
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-# REMOVED: from langchain_ollama import OllamaLLM 
 
 # NEW: Import for Google Generative AI
 import google.generativeai as genai 
 
-# REMOVED: from langchain.chains import RetrievalQA # Not directly used with raw genai.GenerativeModel for RAG
 from langchain_core.prompts import PromptTemplate
-# REMOVED: from langchain.chains import LLMChain # Not directly used with raw genai.GenerativeModel for classification
 
 # Import constants from document_manager
 from document_manager import DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS, TEMPLATE_DIR 
@@ -23,20 +20,17 @@ from document_manager import DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS, TEMPL
 CHROMA_DB_DIR = "./chroma_db"
 EMBEDDINGS_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
-# --- REMOVED: Ollama Configuration ---
-# REMOVED: OLLAMA_BASE_URL = "http://localhost:11434"
-# REMOVED: OLLAMA_MODEL_NAME = "phi3:mini"
-
 # --- NEW: Gemini API Configuration ---
 # This will fetch the key from the environment variables set on your VM
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
-GEMINI_MODEL_NAME = "gemini-pro" # Or gemini-1.5-flash for faster/cheaper inference
+# FIX: Changed model name from "gemini-pro" to "gemini-1.0-pro" for better compatibility
+GEMINI_MODEL_NAME = "gemini-1.0-pro" # Or "gemini-1.5-flash" if you prefer faster/cheaper inference
 
 # Global variables for the AI components (will be initialized once)
-llm = None # This will now be our Gemini model instance
+llm = None 
 retriever = None 
 
-async def initialize_aleks_components(): # Made async
+async def initialize_aleks_components(): 
     """
     Initializes the RAG components and the LLM (Gemini), making them globally accessible for API endpoints.
     This function should be called once when the FastAPI application starts.
@@ -63,7 +57,7 @@ async def initialize_aleks_components(): # Made async
             print(f"WARNING: Chroma DB directory '{CHROMA_DB_DIR}' not found. Please run 'python vector_db_creator.py' to create it.")
             retriever = None
         else:
-            retriever = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings).as_retriever(search_kwargs={"k": 3}) # Retrieve top 3 relevant chunks
+            retriever = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings).as_retriever(search_kwargs={"k": 3}) 
             print(f"Loaded ChromaDB from {CHROMA_DB_DIR}")
     except Exception as e:
         print(f"Error loading ChromaDB from {CHROMA_DB_DIR}: {e}")
@@ -72,31 +66,24 @@ async def initialize_aleks_components(): # Made async
 
     print("Aleks AI components initialized successfully!")
 
-# MODIFIED: get_rag_response function to use Gemini API and accept language
-async def get_rag_response(query: str, language: str = "en") -> dict: # Added language parameter
-    """
-    Performs RAG query using the initialized LLM (Gemini) and retriever.
-    Returns the full answer and sources.
-    """
+async def get_rag_response(query: str, language: str = "en") -> dict: 
     global llm, retriever 
 
     if llm is None or retriever is None:
-        await initialize_aleks_components() # Ensure components are initialized
+        await initialize_aleks_components() 
 
-    if retriever is None: # Check again after initialization attempt
+    if retriever is None: 
         return {
             "response": "I'm sorry, the legal document database is not available right now. Please try again later.",
             "sources": []
         }
 
     try:
-        # 1. Retrieve relevant documents
         print(f"DEBUG: Starting document retrieval for query: '{query}'")
         docs = retriever.invoke(query)
         context_text = "\n\n".join([doc.page_content for doc in docs])
         print(f"DEBUG: Retrieved {len(docs)} documents.")
 
-        # Define RAG prompt template for Gemini
         rag_template = """You are Aleks, an AI legal assistant knowledgeable in Philippine law.
         Use the following pieces of retrieved context to answer the question.
         If you don't know the answer, just say that you don't have enough information from the provided legal documents.
@@ -110,14 +97,12 @@ async def get_rag_response(query: str, language: str = "en") -> dict: # Added la
         """
         rag_prompt_template = PromptTemplate.from_template(rag_template)
         
-        # Prepare content for Gemini API, including language instruction
         prompt_parts = [
             {"text": rag_prompt_template.format(context=context_text, question=query, language=language)}
         ]
 
         print(f"DEBUG: Sending prompt to Gemini: {prompt_parts[0]['text'][:200]}...") 
 
-        # 2. Call the Gemini API
         response = await llm.generate_content(
             prompt_parts,
             safety_settings=[
@@ -132,7 +117,6 @@ async def get_rag_response(query: str, language: str = "en") -> dict: # Added la
         generated_text = response.text
         print(f"DEBUG: Received response from Gemini: {generated_text[:200]}...")
 
-        # Format source documents nicely for API response
         sources_info = []
         for doc in docs:
             source_name = doc.metadata.get('source', 'Unknown Document')
@@ -156,12 +140,7 @@ async def get_rag_response(query: str, language: str = "en") -> dict: # Added la
             "sources": []
         }
 
-# MODIFIED: detect_document_request function to use Gemini API and accept language
-async def detect_document_request(query: str, template_names: list, language: str = "en") -> str: # Added language parameter
-    """
-    Uses the LLM (Gemini) to determine if the query is a request for a document template
-    and identifies which document type, considering the user's language.
-    """
+async def detect_document_request(query: str, template_names: list, language: str = "en") -> str: 
     global llm 
 
     if llm is None:
@@ -169,8 +148,6 @@ async def detect_document_request(query: str, template_names: list, language: st
 
     formatted_template_names = ", ".join(template_names)
 
-    # Craft a precise prompt for Gemini for classification.
-    # It's crucial to instruct the LLM to respond ONLY with the document type or "NONE".
     prompt_text = f"""You are an AI assistant specializing in identifying requests for legal document templates.
     Review the user's query and determine if they are asking for a legal document template.
     If they are, identify which specific document they are asking for from the following types: {formatted_template_names}.
@@ -207,14 +184,13 @@ async def detect_document_request(query: str, template_names: list, language: st
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
             ],
             generation_config={
-                "temperature": 0.0, # Keep temperature very low for deterministic classification
-                "max_output_tokens": 50 # Limit output length to prevent verbose responses
+                "temperature": 0.0, 
+                "max_output_tokens": 50 
             }
         )
         
         detected_document_type = response.text.strip().lower()
 
-        # Basic validation: ensure the response is one of the expected types or "none"
         if detected_document_type not in template_names and detected_document_type != "none":
             print(f"Warning: Gemini returned an unexpected document type: '{detected_document_type}'. Returning NONE.")
             return "NONE" 
