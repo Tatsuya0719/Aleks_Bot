@@ -145,17 +145,33 @@ def create_vector_db():
 
         # NEW: Filter complex metadata before sending to ChromaDB
         processed_chunks = []
-        for chunk in all_chunks:
-            # The filter_complex_metadata function expects a Document object, not just its metadata.
-            # It returns a new Document object with processed metadata.
-            # We also ensure that the chunk is indeed a Document object before processing.
-            if isinstance(chunk, Document):
+        for i, chunk in enumerate(all_chunks): # Added enumerate for debugging
+            # Explicitly check if chunk is a Document object. If not, try to handle or skip.
+            if not isinstance(chunk, Document):
+                print(f"WARNING: Chunk {i} is not a Document object (Type: {type(chunk)}). Attempting to convert if it's a known non-Document type.")
+                # If it's a tuple, it might be (page_content, metadata_dict) from a custom loader/splitter
+                if isinstance(chunk, tuple) and len(chunk) == 2 and isinstance(chunk[1], dict):
+                    try:
+                        chunk = Document(page_content=chunk[0], metadata=chunk[1])
+                        print(f"WARNING: Successfully converted tuple to Document for chunk {i}.")
+                    except Exception as conv_e:
+                        print(f"CRITICAL ERROR: Failed to convert tuple to Document for chunk {i}: {conv_e}")
+                        print(f"Skipping chunk {i}. Raw chunk: {str(chunk)[:100]}...")
+                        continue
+                else:
+                    print(f"CRITICAL ERROR: Chunk {i} is not a Document object and cannot be converted. Type: {type(chunk)}, Value: {str(chunk)[:100]}...")
+                    print("Skipping this non-Document chunk. This indicates an issue in document loading or splitting.")
+                    continue
+
+            # Now that we are sure 'chunk' is a Document, process its metadata
+            try:
                 processed_chunk = filter_complex_metadata(chunk) # Pass the whole chunk object
                 processed_chunks.append(processed_chunk)
-            else:
-                print(f"CRITICAL ERROR: Expected Document object but got type {type(chunk)} for chunk: {chunk.page_content[:50] if hasattr(chunk, 'page_content') else str(chunk)[:50]}...")
-                print("Skipping this non-Document chunk. This indicates an issue in document loading or splitting.")
-                continue # Skip this chunk if it's not a Document object
+            except Exception as e:
+                print(f"CRITICAL ERROR: Failed to process chunk {i} with filter_complex_metadata: {e}")
+                traceback.print_exc()
+                print(f"Skipping chunk {i}.")
+                continue # Skip this chunk if processing fails
 
         # Add documents with their metadata (including tags) to ChromaDB
         Chroma.from_documents(
