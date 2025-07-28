@@ -22,39 +22,19 @@ EMBEDDINGS_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L1
 
 # --- Ollama Configuration ---
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL_NAME = "phi3:mini" # Keep this smaller model for better performance
+OLLAMA_MODEL_NAME = "phi3:mini"
 
 # Global variables for the AI components (will be initialized once)
 qa_chain = None
 llm = None
-retriever = None 
-
-# Define a comprehensive list of potential tags (MUST MATCH vector_db_creator.py)
-ALL_POSSIBLE_TAGS = [
-    "labor_law", "employment", "wages", "termination", "employee_rights", "employer_obligations",
-    "family_law", "marriage", "divorce", "child_custody", "adoption", "support",
-    "contract_law", "agreements", "breach", "enforcement", "nda", "lease", "service_agreement",
-    "tax_law", "income_tax", "vat", "business_tax", "tax_filing", "tax_compliance",
-    "property_law", "real_estate", "ownership", "land_disputes", "rent", "leasehold",
-    "criminal_law", "offenses", "penalties", "arrest", "court_procedures", "rights_of_accused",
-    "constitutional_law", "human_rights", "government_structure", "citizenship", "elections",
-    "civil_law", "torts", "damages", "obligations", "succession", "persons",
-    "corporate_law", "business_registration", "corporate_governance", "mergers", "acquisitions",
-    "data_privacy_law", "data_protection", "privacy_rights", "data_breach", "consent",
-    "holidays_law", "public_holidays", "special_non_working_days", "holiday_pay",
-    "business_registration", "permits", "licenses", "dti", "sec", "bir", "sss", "philhealth", "pagibig",
-    "consumer_protection", "product_liability", "consumer_rights",
-    "intellectual_property", "copyright", "trademark", "patent",
-    "court_procedures", "litigation", "evidence", "appeals",
-    "immigration_law", "visa", "citizenship_application", "foreigners_rights"
-]
+retriever = None # Make retriever global for direct testing if needed
 
 def initialize_aleks_components():
     """
     Initializes the RAG chain and LLM, making them globally accessible for API endpoints.
     This function should be called once when the FastAPI application starts.
     """
-    global qa_chain, llm, retriever 
+    global qa_chain, llm, retriever # Add retriever to global
     print("Initializing Aleks AI components...")
     
     print("Loading embedding model for retrieval...")
@@ -84,7 +64,7 @@ def initialize_aleks_components():
             base_url=OLLAMA_BASE_URL,
             model=OLLAMA_MODEL_NAME,
             temperature=0.1,
-            verbose=True, 
+            verbose=True, # For more debugging output from LangChain
         )
         print(f"Using local LLM via Ollama: {OLLAMA_MODEL_NAME}")
     except Exception as e:
@@ -92,10 +72,7 @@ def initialize_aleks_components():
         print("Please ensure Ollama is installed, the model is pulled, and the Ollama server is running, and 'langchain-ollama' is installed.")
         raise 
 
-    # Retriever will be configured dynamically in get_rag_response based on tags
-    # We will initialize a basic retriever here for the qa_chain, but the actual filtering
-    # will happen when we call retriever.get_relevant_documents directly.
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 1}) # Default k=1
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
 
     # Custom RAG Prompt Template 
     rag_template = """You are Aleks, an AI legal assistant specializing in Philippine law.
@@ -107,130 +84,50 @@ Context: {context}
 Question: {question}
 
 Helpful Answer:"""
-    global RAG_PROMPT_CUSTOM # Make it global for direct use
     RAG_PROMPT_CUSTOM = PromptTemplate.from_template(rag_template)
 
 
-    # The qa_chain will now be set up to use the retriever, but the filtering
-    # will be handled by manually calling retriever.get_relevant_documents
-    # before passing the context to the LLM.
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
-        retriever=retriever, # This retriever will be used for the base similarity search
+        retriever=retriever,
         return_source_documents=True,
-        chain_type_kwargs={"prompt": RAG_PROMPT_CUSTOM} # FIX: Pass the custom prompt here
+        # REMOVED: chain_type_kwargs={"prompt": RAG_PROMPT_CUSTOM} 
     )
     print("Aleks AI components loaded successfully!")
 
-# FIX: Removed unused 'language' parameter from function signature
-def detect_tags_from_query(query: str) -> list:
-    """
-    Uses the LLM to detect relevant tags from the user's query.
-    """
-    if llm is None:
-        raise RuntimeError("LLM not initialized for tag detection.")
-
-    tag_list_str = ", ".join(ALL_POSSIBLE_TAGS)
-    tag_detection_prompt = PromptTemplate(
-        input_variables=["query", "tag_list"],
-        template=f"""Analyze the user's query and identify any relevant legal tags from the following list: {tag_list_str}.
-        Return ONLY the tags that are directly relevant to the query, separated by commas. If no tags are relevant, return "NONE".
-        Do not include any other text or explanation.
-
-        Examples:
-        Query: What are the laws about employment in the Philippines?
-        Response: labor_law
-
-        Query: I need help with my marriage contract.
-        Response: family_law, contract_law
-
-        Query: How to file taxes?
-        Response: tax_law
-
-        Query: General question about the legal system.
-        Response: NONE
-
-        Query: {query}
-        Response:"""
-    )
-
-    llm_chain_tags = LLMChain(prompt=tag_detection_prompt, llm=llm)
-    
-    try:
-        response = llm_chain_tags.invoke({"query": query, "tag_list": tag_list_str})
-        detected_tags_raw = response['text'].strip().lower()
-        
-        if detected_tags_raw == "none" or not detected_tags_raw:
-            return []
-        
-        # Parse detected tags, ensuring they are valid
-        generated_tags = [tag.strip() for tag in detected_tags_raw.split(',') if tag.strip() in ALL_POSSIBLE_TAGS]
-        return list(set(generated_tags)) # Return unique tags
-    except Exception as e:
-        print(f"CRITICAL ERROR IN TAG DETECTION LLMCHAIN INVOCATION: {e}")
-        traceback.print_exc()
-        return [] # Return empty list on error
-
-# FIX: Removed unused 'language' parameter from function signature
+# MODIFIED: get_rag_response no longer accepts language
 def get_rag_response(query: str) -> dict:
     """
-    Performs RAG query using the initialized qa_chain, with tag-based filtering.
+    Performs RAG query using the initialized qa_chain.
     """
-    global retriever # Ensure we can access the global retriever
-    if qa_chain is None or retriever is None:
+    if qa_chain is None:
         raise RuntimeError("Aleks components not initialized. Call initialize_aleks_components first.")
     
+    # DEBUG: print statements for more visibility and timing
     print(f"DEBUG: Invoking RAG chain with query: '{query}'") 
     
     try: 
         print("DEBUG: Before qa_chain.invoke - attempting RAG process...") 
         
-        # --- Step 1.0: Detect Tags from Query ---
-        tag_detection_start_time = datetime.now()
-        print(f"DEBUG: Starting tag detection... (Time: {tag_detection_start_time.strftime('%H:%M:%S.%f')})")
-        detected_tags = detect_tags_from_query(query)
-        tag_detection_end_time = datetime.now()
-        tag_detection_duration = (tag_detection_end_time - tag_detection_start_time).total_seconds()
-        print(f"DEBUG: Tag detection completed. Detected tags: {detected_tags} in {tag_detection_duration:.2f} seconds.")
-
-        # --- Step 1.1: Document Retrieval with Metadata Filtering ---
+        # --- Start timing for retrieval ---
         retrieval_start_time = datetime.now()
-        print(f"DEBUG: Starting document retrieval with tags: {detected_tags}... (Time: {retrieval_start_time.strftime('%H:%M:%S.%f')})") 
+        print(f"DEBUG: Starting document retrieval... (Time: {retrieval_start_time.strftime('%H:%M:%S.%f')})") 
         
-        # Build the metadata filter (ChromaDB 'where' clause)
-        where_clause = {}
-        if detected_tags:
-            # For multiple tags, use '$or' to match any of the detected tags
-            # The 'tags' field in metadata is expected to be a list
-            where_clause = {"tags": {"$contains_any": detected_tags}}
-            print(f"DEBUG: Applying ChromaDB filter: {where_clause}")
-        else:
-            print("DEBUG: No specific tags detected, performing general retrieval.")
+        # The qa_chain.invoke implicitly calls the retriever first, then the LLM.
+        # We need to explicitly call retriever for accurate timing.
         
-        # Use the retriever with the 'where' clause
-        retrieved_docs = retriever.get_relevant_documents(query, where=where_clause)
-        
+        # Step 1: Document Retrieval
+        retrieved_docs = retriever.get_relevant_documents(query)
         retrieval_end_time = datetime.now()
         retrieval_duration = (retrieval_end_time - retrieval_start_time).total_seconds()
         print(f"DEBUG: Document retrieval completed. Found {len(retrieved_docs)} documents in {retrieval_duration:.2f} seconds.")
+        # If this point is reached quickly, the hang is in the LLM part
 
-        # Ensure we have at least some documents, even if filtered heavily
-        if not retrieved_docs and detected_tags:
-            print("WARNING: No documents found with specified tags. Retrying without tag filter.")
-            retrieved_docs = retriever.get_relevant_documents(query) # Fallback to no filter
-            print(f"DEBUG: Fallback retrieval found {len(retrieved_docs)} documents.")
-
-        # If still no documents, return a specific message
-        if not retrieved_docs:
-            return {
-                "answer": "Sorry, I couldn't find relevant information in the documents to answer that. Please try rephrasing your question.",
-                "sources": []
-            }
-
-        # --- Step 2: LLM Generation with retrieved context ---
-        print(f"DEBUG: Starting LLM generation with context... (Time: {retrieval_end_time.strftime('%H:%M:%S.%f')})") 
+        # Step 2: LLM Generation with retrieved context
+        print(f"DEBUG: Starting LLM generation with context... (Time: {retrieval_end_time.strftime('%H:%M:%S.%f')})") # This is retrieval_end_time which is start of LLM
         
+        # Manually create the input for the LLM based on retrieved docs
         context_text = "\n\n".join([doc.page_content for doc in retrieved_docs])
         
         # Reconstruct the prompt template with context and question
@@ -248,7 +145,7 @@ Helpful Answer:"""
         
         llm_chain = LLMChain(prompt=llm_prompt, llm=llm)
         
-        llm_generation_start_time = datetime.now() 
+        llm_generation_start_time = datetime.now() # More accurate start time for LLM
         
         # Pass context and query to the LLM chain
         response_from_llm_chain = llm_chain.invoke({"context": context_text, "question": query})
@@ -257,11 +154,12 @@ Helpful Answer:"""
         llm_generation_duration = (llm_generation_end_time - llm_generation_start_time).total_seconds()
         print(f"DEBUG: LLM generation completed in {llm_generation_duration:.2f} seconds.")
         
-        final_result = response_from_llm_chain['text'] 
+        # Combine the results as RetrievalQA would
+        final_result = response_from_llm_chain['text'] # Assuming LLMChain returns text in 'text' key
         
         # Format source documents nicely for API response
         sources_info = []
-        if retrieved_docs: 
+        if retrieved_docs: # Use retrieved_docs directly here
             for i, doc in enumerate(retrieved_docs):
                 source_name = doc.metadata.get('source', 'Unknown Document')
                 start_index = doc.metadata.get('start_index', 'N/A')
@@ -281,7 +179,6 @@ Helpful Answer:"""
         traceback.print_exc() 
         raise 
 
-# FIX: Removed unused 'language' parameter from function signature
 def detect_document_request(query: str) -> str:
     """
     Uses an LLM to determine if the query is a request for a document template
@@ -292,6 +189,7 @@ def detect_document_request(query: str) -> str:
 
     template_names = ", ".join(DOCUMENT_TEMPLATES.keys())
     
+    # Document detection prompt
     prompt_template = PromptTemplate(
         input_variables=["query", "template_names"], 
         template="""You are an AI assistant. Analyze the user's query to determine if they are asking for a legal document template.
@@ -322,9 +220,11 @@ Response:"""
 
     llm_chain = LLMChain(prompt=prompt_template, llm=llm)
     
+    # Temporarily adjust temperature for classification task
     original_temperature = llm.temperature
     llm.temperature = 0.3
     try: 
+        # Pass only 'query' and 'template_names' to invoke
         response = llm_chain.invoke({"query": query, "template_names": template_names}) 
     except Exception as e:
         print(f"CRITICAL ERROR IN LLMCHAIN INVOCATION (Document Detection): {e}")
