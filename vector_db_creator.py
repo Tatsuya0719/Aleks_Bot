@@ -3,6 +3,7 @@ import os
 import shutil # For removing directory
 import re # For parsing filenames
 from datetime import datetime # For timing
+import traceback # Ensure this is imported for error reporting
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -145,14 +146,16 @@ def create_vector_db():
         # NEW: Filter complex metadata before sending to ChromaDB
         processed_chunks = []
         for chunk in all_chunks:
-            # DEBUG: Explicitly check type before processing metadata
-            if not isinstance(chunk, Document):
-                print(f"CRITICAL ERROR: Expected Document object but got type {type(chunk)} for chunk: {chunk.page_content[:50]}...")
-                print("Skipping this chunk to prevent metadata error. This indicates an issue in document loading or splitting.")
+            # The filter_complex_metadata function expects a Document object, not just its metadata.
+            # It returns a new Document object with processed metadata.
+            # We also ensure that the chunk is indeed a Document object before processing.
+            if isinstance(chunk, Document):
+                processed_chunk = filter_complex_metadata(chunk) # Pass the whole chunk object
+                processed_chunks.append(processed_chunk)
+            else:
+                print(f"CRITICAL ERROR: Expected Document object but got type {type(chunk)} for chunk: {chunk.page_content[:50] if hasattr(chunk, 'page_content') else str(chunk)[:50]}...")
+                print("Skipping this non-Document chunk. This indicates an issue in document loading or splitting.")
                 continue # Skip this chunk if it's not a Document object
-
-            chunk.metadata = filter_complex_metadata(chunk.metadata)
-            processed_chunks.append(chunk)
 
         # Add documents with their metadata (including tags) to ChromaDB
         Chroma.from_documents(
