@@ -82,26 +82,42 @@ def generate_tags_for_batch(llm_tagger, chunks: list) -> list:
     for i, chunk in enumerate(chunks):
         batch_prompt_content += f"Chunk {i+1} (ID: chunk_{i}):\n---\n{chunk.page_content}\n---\n\n"
 
-    # MODIFIED PROMPT: Emphasize JSON format and start with JSON opening bracket
+    # MODIFIED PROMPT: Even stronger emphasis on JSON, and a clear instruction to only output JSON
     tagging_prompt_template = PromptTemplate(
         input_variables=["batch_content", "tag_list"],
-        template=f"""For each of the following text chunks, identify the most relevant legal topics or categories from this list: {tag_list_str}.
-        Return ONLY the relevant tags for each chunk in a JSON array, where each object has a 'chunk_id' (e.g., 'chunk_0', 'chunk_1') and a 'tags' array.
-        If no tags are relevant for a chunk, its 'tags' array should be empty.
-        Your response MUST be a valid JSON array and contain NOTHING else. Start your response with '['.
+        template=f"""You are a highly precise AI assistant. Your task is to identify relevant legal topics for each provided text chunk from the given list of tags.
+        You MUST return your response as a valid JSON array. Each object in the array MUST have a 'chunk_id' (e.g., 'chunk_0', 'chunk_1') and a 'tags' array.
+        If no tags are relevant for a chunk, its 'tags' array MUST be empty.
+        DO NOT include any introductory text, conversational phrases, explanations, or anything outside the JSON array.
+        Your entire response MUST be a single, valid JSON array.
 
+        Available Tags: {tag_list_str}
+
+        Text Chunks for Tagging:
         {batch_prompt_content}
 
-        Relevant Tags (JSON format):"""
+        JSON Response:"""
     )
     llm_chain = LLMChain(prompt=tagging_prompt_template, llm=llm_tagger)
 
     try:
         response = llm_chain.invoke({"batch_content": batch_prompt_content, "tag_list": tag_list_str})
-        raw_json_output = response['text'].strip()
+        raw_llm_output = response['text'].strip()
         
+        # AGGRESSIVE CLEANUP: Try to find the first '[' and last ']' to extract potential JSON
+        json_start = raw_llm_output.find('[')
+        json_end = raw_llm_output.rfind(']')
+
+        cleaned_json_output = ""
+        if json_start != -1 and json_end != -1 and json_end > json_start:
+            cleaned_json_output = raw_llm_output[json_start : json_end + 1]
+        else:
+            print(f"Warning: Could not find valid JSON boundaries in LLM output. Raw output: {raw_llm_output[:500]}...")
+            return [[] for _ in chunks] # Return empty tags if no JSON boundaries found
+
+
         # Attempt to parse the JSON output
-        parsed_results = json.loads(raw_json_output)
+        parsed_results = json.loads(cleaned_json_output)
         
         # Create a dictionary for easy lookup by chunk_id
         tags_map = {item['chunk_id']: item.get('tags', []) for item in parsed_results if 'chunk_id' in item}
@@ -120,8 +136,8 @@ def generate_tags_for_batch(llm_tagger, chunks: list) -> list:
         return batch_tags
 
     except json.JSONDecodeError as e:
-        print(f"Warning: LLM returned malformed JSON for tagging batch. Error: {e}")
-        print(f"Raw LLM output: {raw_json_output[:500]}...") # Print first 500 chars of problematic output
+        print(f"Warning: LLM returned malformed JSON for tagging batch even after cleanup. Error: {e}")
+        print(f"Cleaned LLM output: {cleaned_json_output[:500]}...") # Print cleaned problematic output
         return [[] for _ in chunks] # Return empty tags for all chunks in this batch
     except Exception as e:
         print(f"Warning: Error generating tags for batch: {e}")
