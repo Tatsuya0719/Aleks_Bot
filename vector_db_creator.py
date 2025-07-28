@@ -9,6 +9,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document # Import Document class from langchain_core
+# NEW IMPORT: For handling complex metadata for ChromaDB
+from langchain_community.vectorstores.utils import filter_complex_metadata 
 
 # Assuming these constants are defined in document_manager.py
 # If not, you might need to define them here or ensure document_manager.py is imported correctly
@@ -146,9 +148,17 @@ def create_vector_db():
             shutil.rmtree(CHROMA_DB_DIR)
             print("Existing ChromaDB removed.")
 
+        # NEW: Filter complex metadata before sending to ChromaDB
+        # This will convert the list of tags into a format ChromaDB can handle for filtering
+        processed_chunks = []
+        for chunk in all_chunks:
+            # Ensure the 'tags' metadata is processed by filter_complex_metadata
+            chunk.metadata = filter_complex_metadata(chunk.metadata)
+            processed_chunks.append(chunk)
+
         # Add documents with their metadata (including tags) to ChromaDB
         Chroma.from_documents(
-            all_chunks, # Use the chunks with file-name-based tags
+            processed_chunks, # Use the processed chunks
             embeddings,
             persist_directory=CHROMA_DB_DIR
         )
