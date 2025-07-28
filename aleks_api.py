@@ -1,17 +1,18 @@
 # aleks_api.py
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+# Removed: from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
 import os
 import re
 from datetime import datetime
 import traceback 
-import asyncio 
+# Removed: import asyncio 
 
 # Import core Aleks functions and constants from the refactored files
-from aleks_core import initialize_aleks_components, get_rag_response_stream, detect_document_request 
+# Modified: Changed import to get_rag_response (non-streaming)
+from aleks_core import initialize_aleks_components, get_rag_response, detect_document_request 
 from document_manager import DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS, TEMPLATE_DIR 
 
 
@@ -60,7 +61,7 @@ async def startup_event():
         traceback.print_exc() 
         raise 
 
-# FIX: Changed endpoint path back to "/api/chat" to match the incoming request path from Netlify
+# Endpoint path remains /api/chat as per your last working setup
 @app.post("/api/chat") 
 async def chat_with_aleks(request: ChatRequest):
     """
@@ -106,7 +107,12 @@ async def chat_with_aleks(request: ChatRequest):
             "placeholders_to_fill": placeholder_details
         }
     else:
-        return StreamingResponse(get_rag_response_stream(user_message), media_type="text/event-stream")
+        # Modified: Call get_rag_response (non-streaming) and return a standard JSON response
+        try:
+            rag_response = get_rag_response(user_message)
+            return {"type": "rag_response", "response": rag_response["answer"], "sources": rag_response["sources"]}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error processing RAG query: {e}")
 
 @app.post("/api/generate_document")
 async def generate_document(request: DocumentFillRequest):

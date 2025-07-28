@@ -60,20 +60,20 @@ def initialize_aleks_components():
 
     print("Initializing LLM...")
     try:
+        # Modified: Removed `streaming=True` for OllamaLLM
         llm = OllamaLLM( 
             base_url=OLLAMA_BASE_URL,
             model=OLLAMA_MODEL_NAME,
             temperature=0.1,
             verbose=True, 
-            streaming=True # Enable streaming for the LLM
         )
-        print(f"Using local LLM via Ollama: {OLLAMA_MODEL_NAME} with streaming enabled.")
+        print(f"Using local LLM via Ollama: {OLLAMA_MODEL_NAME} (non-streaming).")
     except Exception as e:
         print(f"Error initializing Local LLM via Ollama: {e}")
         print("Please ensure Ollama is installed, the model is pulled, and the Ollama server is running, and 'langchain-ollama' is installed.")
         raise 
 
-    # MODIFIED: Reduced k from 2 to 1 to send even less context to the LLM
+    # Set k to 1 as requested
     retriever = vectorstore.as_retriever(search_kwargs={"k": 1}) 
 
     rag_template = """You are Aleks, an AI legal assistant specializing in Philippine law.
@@ -96,58 +96,45 @@ Helpful Answer:"""
     )
     print("Aleks AI components loaded successfully!")
 
-async def get_rag_response_stream(query: str):
+# Modified: Renamed from get_rag_response_stream to get_rag_response and removed async generator logic
+def get_rag_response(query: str) -> dict:
     """
-    Performs RAG query and yields response tokens as they are generated.
+    Performs RAG query using the initialized qa_chain.
     """
-    global retriever, llm, RAG_PROMPT_CUSTOM 
-    if retriever is None or llm is None or RAG_PROMPT_CUSTOM is None:
-        yield "Error: Aleks components not initialized for streaming. Please restart the backend."
-        return
-
-    print(f"DEBUG: Invoking RAG chain STREAMING with query: '{query}'") 
+    global qa_chain # Ensure we can access the global qa_chain
+    if qa_chain is None:
+        raise RuntimeError("Aleks components not initialized. Call initialize_aleks_components first.")
+    
+    print(f"DEBUG: Invoking RAG chain with query: '{query}'") 
     
     try: 
-        print("DEBUG: Starting document retrieval for streaming...") 
-        retrieval_start_time = datetime.now()
-        
-        retrieved_docs = retriever.get_relevant_documents(query)
-        retrieval_end_time = datetime.now()
-        retrieval_duration = (retrieval_end_time - retrieval_start_time).total_seconds()
-        print(f"DEBUG: Document retrieval completed. Found {len(retrieved_docs)} documents in {retrieval_duration:.2f} seconds.")
-
-        if not retrieved_docs:
-            yield "Sorry, I couldn't find relevant information in the documents to answer that."
-            return
-
-        context_text = "\n\n".join([doc.page_content for doc in retrieved_docs])
-        
-        print(f"DEBUG: Starting LLM generation STREAMING with context... (Time: {retrieval_end_time.strftime('%H:%M:%S.%f')})") 
-        
-        full_prompt_input = RAG_PROMPT_CUSTOM.format(context=context_text, question=query)
-
-        llm_generation_start_time = datetime.now()
-        for chunk in llm.stream(full_prompt_input): 
-            if 'text' in chunk:
-                yield chunk['text'] 
-        
+        llm_generation_start_time = datetime.now() 
+        response = qa_chain.invoke({"query": query}) # Use invoke directly
         llm_generation_end_time = datetime.now()
         llm_generation_duration = (llm_generation_end_time - llm_generation_start_time).total_seconds()
-        print(f"DEBUG: LLM generation STREAMING completed in {llm_generation_duration:.2f} seconds.")
-
+        print(f"DEBUG: LLM generation completed in {llm_generation_duration:.2f} seconds.")
+        
+        # Format source documents nicely for API response
         sources_info = []
-        if retrieved_docs: 
-            for i, doc in enumerate(retrieved_docs):
+        if response.get("source_documents"): 
+            for i, doc in enumerate(response["source_documents"]):
                 source_name = doc.metadata.get('source', 'Unknown Document')
-                sources_info.append(f"Source: {source_name}, Snippet: {doc.page_content[:100]}...")
-        if sources_info:
-            print("DEBUG: Generated Sources:", sources_info) 
+                start_index = doc.metadata.get('start_index', 'N/A')
+                sources_info.append({
+                    "source": source_name,
+                    "startIndex": start_index,
+                    "snippet": doc.page_content[:200] + "..." 
+                })
+
+        return {
+            "answer": response["result"],
+            "sources": sources_info
+        }
 
     except Exception as e:
-        print(f"CRITICAL ERROR IN RAG CHAIN STREAMING INVOCATION: {e}")
+        print(f"CRITICAL ERROR IN RAG CHAIN INVOCATION: {e}")
         traceback.print_exc() 
-        yield f"Error: An error occurred during processing: {e}" 
-        return 
+        raise # Re-raise the exception for FastAPI to catch and return 500
 
 def detect_document_request(query: str) -> str:
     """
