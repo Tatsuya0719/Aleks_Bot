@@ -23,14 +23,14 @@ EMBEDDINGS_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L1
 # --- NEW: Gemini API Configuration ---
 # This will fetch the key from the environment variables set on your VM
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
-# FIX: Changed model name from "gemini-1.0-pro" to "gemini-1.5-flash"
 GEMINI_MODEL_NAME = "gemini-1.5-flash" 
 
 # Global variables for the AI components (will be initialized once)
 llm = None 
 retriever = None 
 
-async def initialize_aleks_components(): 
+# MODIFIED: Removed 'async' keyword
+def initialize_aleks_components(): 
     """
     Initializes the RAG components and the LLM (Gemini), making them globally accessible for API endpoints.
     This function should be called once when the FastAPI application starts.
@@ -71,11 +71,13 @@ async def initialize_aleks_components():
 
     print("Aleks AI components initialized successfully!")
 
-async def get_rag_response(query: str, language: str = "en") -> dict: 
+# MODIFIED: Removed 'async' keyword and 'await' calls
+def get_rag_response(query: str, language: str = "en") -> dict: 
     global llm, retriever 
 
+    # MODIFIED: Call initialize_aleks_components synchronously
     if llm is None or retriever is None:
-        await initialize_aleks_components() 
+        initialize_aleks_components() 
 
     if retriever is None: 
         return {
@@ -108,7 +110,8 @@ async def get_rag_response(query: str, language: str = "en") -> dict:
 
         print(f"DEBUG: Sending prompt to Gemini: {prompt_parts[0]['text'][:200]}...") 
 
-        response = await llm.generate_content(
+        # MODIFIED: Removed 'await' keyword
+        response = llm.generate_content(
             prompt_parts,
             safety_settings=[
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -145,11 +148,13 @@ async def get_rag_response(query: str, language: str = "en") -> dict:
             "sources": []
         }
 
-async def detect_document_request(query: str, template_names: list, language: str = "en") -> str: 
+# MODIFIED: Removed 'async' keyword and 'await' calls
+def detect_document_request(query: str, template_names: list, language: str = "en") -> str: 
     global llm 
 
+    # MODIFIED: Call initialize_aleks_components synchronously
     if llm is None:
-        await initialize_aleks_components() 
+        initialize_aleks_components() 
 
     formatted_template_names = ", ".join(template_names)
 
@@ -180,7 +185,8 @@ async def detect_document_request(query: str, template_names: list, language: st
     Response:"""
 
     try:
-        response = await llm.generate_content(
+        # MODIFIED: Removed 'await' keyword
+        response = llm.generate_content(
             [{"text": prompt_text}],
             safety_settings=[
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},

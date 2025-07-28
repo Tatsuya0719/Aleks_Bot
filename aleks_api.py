@@ -6,10 +6,11 @@ import uvicorn
 import os
 import re
 from datetime import datetime
-from typing import Optional # Keep Optional for now, though language is now required
+from typing import Optional 
 import traceback 
 
 # Import core Aleks functions and constants from the refactored files
+# MODIFIED: initialize_aleks_components, get_rag_response, detect_document_request are now synchronous
 from aleks_core import initialize_aleks_components, get_rag_response, detect_document_request
 from document_manager import DOCUMENT_TEMPLATES, PLACEHOLDER_DESCRIPTIONS, TEMPLATE_DIR 
 
@@ -37,24 +38,23 @@ app.add_middleware(
 # --- API Models (Pydantic for data validation) ---
 class ChatRequest(BaseModel):
     message: str
-    language: str = "en" # NEW: Add language parameter to request
+    language: str = "en" 
 
 class DocumentFillRequest(BaseModel):
     template_key: str
     filled_data: dict
-    # Removed: language: Optional[str] = "en" # Language not directly needed for document generation
 
 # --- API Endpoints ---
 
 @app.on_event("startup")
-async def startup_event():
+def startup_event(): # MODIFIED: Removed 'async' keyword
     """
     Initializes Aleks components when the FastAPI application starts.
     This ensures the LLM and vector store are loaded once.
     """
     print("Starting up Aleks API...")
     try:
-        await initialize_aleks_components() # MODIFIED: Await the async initialization
+        initialize_aleks_components() # MODIFIED: Removed 'await' keyword
         print("Aleks API ready!")
     except Exception as e:
         print(f"Failed to initialize Aleks components: {e}. Please check your setup (Gemini API key, ChromaDB, etc.).")
@@ -62,19 +62,19 @@ async def startup_event():
         raise 
 
 @app.post("/api/chat")
-async def chat_with_aleks(request: ChatRequest):
+async def chat_with_aleks(request: ChatRequest): # Keep this async because FastAPI expects async for route handlers
     """
     Main chat endpoint. Detects document requests or performs RAG.
     """
     user_message = request.message.strip()
-    user_language = request.language # NEW: Get language from request
+    user_language = request.language 
 
     if not user_message:
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
 
     # 1. Detect if it's a document request
-    # MODIFIED: Await the async function and pass language and template_names
-    detected_doc_type = await detect_document_request(user_message, list(DOCUMENT_TEMPLATES.keys()), user_language)
+    # MODIFIED: Removed 'await' keyword
+    detected_doc_type = detect_document_request(user_message, list(DOCUMENT_TEMPLATES.keys()), user_language)
 
     if detected_doc_type != "NONE":
         template_filename = DOCUMENT_TEMPLATES.get(detected_doc_type)
@@ -114,9 +114,8 @@ async def chat_with_aleks(request: ChatRequest):
     else:
         # 2. Perform RAG query
         try:
-            # MODIFIED: Await the async function and pass language
-            rag_response = await get_rag_response(user_message, user_language)
-            # MODIFIED: Use 'response' key from rag_response
+            # MODIFIED: Removed 'await' keyword
+            rag_response = get_rag_response(user_message, user_language)
             return {"type": "rag_response", "response": rag_response["response"], "sources": rag_response["sources"]}
         except Exception as e:
             print(f"ERROR: Exception during RAG query processing: {e}")
@@ -124,7 +123,7 @@ async def chat_with_aleks(request: ChatRequest):
             raise HTTPException(status_code=500, detail=f"Error processing RAG query: {e}")
 
 @app.post("/api/generate_document")
-async def generate_document(request: DocumentFillRequest):
+async def generate_document(request: DocumentFillRequest): # Keep this async for FastAPI route handler
     """
     Generates the final document after all placeholders are filled.
     """
@@ -151,7 +150,6 @@ async def generate_document(request: DocumentFillRequest):
 
     filled_document = template_content
     for placeholder, value in filled_data.items():
-        # Ensure value is string before substitution to avoid TypeError
         filled_document = re.sub(rf"\[{re.escape(placeholder)}\]|" + r"\{\{" + re.escape(placeholder) + r"\}\}", str(value), filled_document)
 
     # Save the document
@@ -168,6 +166,6 @@ async def generate_document(request: DocumentFillRequest):
     return {
         "status": "success",
         "message": f"Document '{output_filename}' generated and saved.",
-        "generated_document_preview": filled_document # Provide a preview for the frontend
+        "generated_document_preview": filled_document 
     }
 
