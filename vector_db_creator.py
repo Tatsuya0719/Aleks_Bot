@@ -27,7 +27,7 @@ BATCH_SIZE = 10 # Number of chunks to process in one LLM call for tagging
 
 # --- Ollama Configuration for Tagging ---
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL_NAME = "phi3:mini" # Use phi3:mini for faster tagging
+OLLAMA_MODEL_NAME = "mistral" # Changed from "phi3:mini" to "mistral"
 
 # Define a comprehensive list of potential tags based on your legal documents
 # This list will be provided to the LLM to guide its tag generation.
