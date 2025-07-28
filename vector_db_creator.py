@@ -1,12 +1,17 @@
 # vector_db_creator.py
 import os
+import shutil # For removing directory
+import json # For parsing LLM's JSON output
+from datetime import datetime # For timing
+import traceback # For detailed error info
+
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
-from langchain_ollama import OllamaLLM # NEW: Import OllamaLLM for tagging
-from langchain_core.prompts import PromptTemplate # NEW: For LLM tagging prompt
-from langchain.chains import LLMChain # NEW: For LLM tagging chain
+from langchain_ollama import OllamaLLM 
+from langchain_core.prompts import PromptTemplate 
+from langchain.chains import LLMChain 
 
 # Assuming these constants are defined in document_manager.py
 # If not, you might need to define them here or ensure document_manager.py is imported correctly
@@ -18,6 +23,7 @@ CHROMA_DB_DIR = "./chroma_db"
 EMBEDDINGS_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 CHUNK_SIZE = 1500
 CHUNK_OVERLAP = 200
+BATCH_SIZE = 10 # Number of chunks to process in one LLM call for tagging
 
 # --- Ollama Configuration for Tagging ---
 OLLAMA_BASE_URL = "http://localhost:11434"
@@ -61,45 +67,70 @@ def create_llm_for_tagging():
         print("Ensure Ollama is running and model is pulled.")
         return None
 
-def generate_tags_for_chunk(llm_tagger, chunk_content: str) -> list:
-    """Uses LLM to generate relevant tags for a given chunk of text."""
-    if llm_tagger is None:
-        return []
+def generate_tags_for_batch(llm_tagger, chunks: list) -> list:
+    """
+    Uses LLM to generate relevant tags for a batch of chunks.
+    Returns a list of lists, where each inner list contains tags for a chunk.
+    """
+    if llm_tagger is None or not chunks:
+        return [[] for _ in chunks] # Return empty tags for all if LLM not ready or no chunks
 
     tag_list_str = ", ".join(ALL_POSSIBLE_TAGS)
+    
+    # Construct the batch prompt
+    batch_prompt_content = ""
+    for i, chunk in enumerate(chunks):
+        batch_prompt_content += f"Chunk {i+1} (ID: chunk_{i}):\n---\n{chunk.page_content}\n---\n\n"
+
     tagging_prompt_template = PromptTemplate(
-        input_variables=["chunk_content", "tag_list"],
-        template=f"""Analyze the following legal text and identify the most relevant legal topics or categories from this list: {tag_list_str}.
-        Return ONLY the relevant tags, separated by commas. If no tags are relevant, return "NONE".
-        Do not include any other text or explanation.
+        input_variables=["batch_content", "tag_list"],
+        template=f"""For each of the following text chunks, identify the most relevant legal topics or categories from this list: {tag_list_str}.
+        Return ONLY the relevant tags for each chunk in a JSON array, where each object has a 'chunk_id' (e.g., 'chunk_0', 'chunk_1') and a 'tags' array.
+        If no tags are relevant for a chunk, its 'tags' array should be empty.
+        Do not include any other text or explanation outside the JSON.
 
-        Legal Text:
-        ---
-        {{chunk_content}}
-        ---
+        {batch_prompt_content}
 
-        Relevant Tags:"""
+        Relevant Tags (JSON format):"""
     )
     llm_chain = LLMChain(prompt=tagging_prompt_template, llm=llm_tagger)
 
     try:
-        response = llm_chain.invoke({"chunk_content": chunk_content, "tag_list": tag_list_str})
-        raw_tags = response['text'].strip().lower()
-        if raw_tags == "none" or not raw_tags:
-            return []
+        response = llm_chain.invoke({"batch_content": batch_prompt_content, "tag_list": tag_list_str})
+        raw_json_output = response['text'].strip()
         
-        # Filter to ensure only valid, predefined tags are returned
-        generated_tags = [tag.strip() for tag in raw_tags.split(',') if tag.strip() in ALL_POSSIBLE_TAGS]
-        return list(set(generated_tags)) # Return unique tags
+        # Attempt to parse the JSON output
+        parsed_results = json.loads(raw_json_output)
+        
+        # Create a dictionary for easy lookup by chunk_id
+        tags_map = {item['chunk_id']: item.get('tags', []) for item in parsed_results if 'chunk_id' in item}
+        
+        # Map parsed tags back to the original order of chunks
+        batch_tags = []
+        for i in range(len(chunks)):
+            chunk_id = f"chunk_{i}"
+            # Filter to ensure only valid, predefined tags are returned
+            current_chunk_tags = [
+                tag.strip() for tag in tags_map.get(chunk_id, []) 
+                if isinstance(tag, str) and tag.strip() in ALL_POSSIBLE_TAGS
+            ]
+            batch_tags.append(list(set(current_chunk_tags))) # Ensure unique tags per chunk
+        
+        return batch_tags
+
+    except json.JSONDecodeError as e:
+        print(f"Warning: LLM returned malformed JSON for tagging batch. Error: {e}")
+        print(f"Raw LLM output: {raw_json_output[:500]}...") # Print first 500 chars of problematic output
+        return [[] for _ in chunks] # Return empty tags for all chunks in this batch
     except Exception as e:
-        print(f"Warning: Error generating tags for chunk: {e}")
+        print(f"Warning: Error generating tags for batch: {e}")
         traceback.print_exc()
-        return []
+        return [[] for _ in chunks] # Return empty tags for all chunks in this batch
 
 
 def create_vector_db():
     """
-    Loads PDF documents, splits them into chunks, assigns LLM-generated tags,
+    Loads PDF documents, splits them into chunks, assigns LLM-generated tags in batches,
     generates embeddings, and stores them in ChromaDB.
     """
     if not os.path.exists(LEGAL_DATA_DIR):
@@ -114,7 +145,7 @@ def create_vector_db():
     print(f"Loading documents from {LEGAL_DATA_DIR}...")
     documents = []
     for filename in os.listdir(LEGAL_DATA_DIR):
-        if filename.endswith(".pdf"):
+        if filename.lower().endswith(".pdf"):
             filepath = os.path.join(LEGAL_DATA_DIR, filename)
             try:
                 loader = PyPDFLoader(filepath)
@@ -139,28 +170,48 @@ def create_vector_db():
         print("No documents loaded. Please check your 'legal_data_pdfs' directory and PDF files.")
         return
 
-    print(f"Splitting {len(documents)} pages into chunks and generating tags...")
+    print(f"Splitting {len(documents)} pages into chunks...")
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
     
-    chunks_with_tags = []
-    for i, doc in enumerate(documents):
-        # Split each document into its own chunks
-        doc_chunks = text_splitter.split_documents([doc])
-        for chunk in doc_chunks:
-            # Generate tags for each chunk using the LLM
-            tags = generate_tags_for_chunk(llm_tagger, chunk.page_content)
-            if not hasattr(chunk, 'metadata'):
-                chunk.metadata = {}
-            chunk.metadata['source'] = doc.metadata.get('source', 'Unknown Document') # Ensure source is carried over
-            chunk.metadata['tags'] = tags # Add the LLM-generated tags
-            chunks_with_tags.append(chunk)
-            print(f"  Processed chunk {len(chunks_with_tags)}: Tags: {tags}, Source: {chunk.metadata['source']}")
+    all_chunks = []
+    for doc in documents:
+        all_chunks.extend(text_splitter.split_documents([doc]))
 
-    if not chunks_with_tags:
-        print("No text chunks created or tagged. Check document content or chunking/tagging parameters.")
+    if not all_chunks:
+        print("No text chunks created. Check document content or chunking parameters.")
         return
 
-    print(f"Created {len(chunks_with_tags)} text chunks with LLM-generated tags.")
+    print(f"Created {len(all_chunks)} text chunks. Starting LLM-based tagging in batches...")
+
+    chunks_with_tags = []
+    total_chunks = len(all_chunks)
+    
+    for i in range(0, total_chunks, BATCH_SIZE):
+        batch = all_chunks[i:i + BATCH_SIZE]
+        print(f"Processing batch {i // BATCH_SIZE + 1}/{(total_chunks + BATCH_SIZE - 1) // BATCH_SIZE} ({len(batch)} chunks)...")
+        batch_start_time = datetime.now()
+        
+        # Generate tags for the entire batch
+        batch_tags_list = generate_tags_for_batch(llm_tagger, batch)
+        
+        batch_end_time = datetime.now()
+        batch_duration = (batch_end_time - batch_start_time).total_seconds()
+        print(f"  Batch processed in {batch_duration:.2f} seconds.")
+
+        # Assign tags back to individual chunks
+        for j, chunk in enumerate(batch):
+            if not hasattr(chunk, 'metadata'):
+                chunk.metadata = {}
+            # Ensure source is carried over, as it might be lost during splitting
+            if 'source' not in chunk.metadata:
+                chunk.metadata['source'] = all_chunks[i+j].metadata.get('source', 'Unknown Document')
+            
+            # Assign the tags for this specific chunk from the batch_tags_list
+            chunk.metadata['tags'] = batch_tags_list[j] if j < len(batch_tags_list) else []
+            chunks_with_tags.append(chunk)
+            print(f"  Chunk {i+j}: Tags: {chunk.metadata['tags']}, Source: {chunk.metadata['source']}")
+
+    print(f"Finished tagging {len(chunks_with_tags)} text chunks.")
 
     print("Initializing embeddings model...")
     try:
@@ -175,9 +226,9 @@ def create_vector_db():
     try:
         # Delete existing ChromaDB to ensure fresh build with new metadata
         if os.path.exists(CHROMA_DB_DIR):
-            import shutil
+            print(f"Removing existing ChromaDB at {CHROMA_DB_DIR}...")
             shutil.rmtree(CHROMA_DB_DIR)
-            print(f"Removed existing ChromaDB at {CHROMA_DB_DIR}")
+            print("Existing ChromaDB removed.")
 
         # Add documents with their metadata (including tags) to ChromaDB
         Chroma.from_documents(
@@ -192,7 +243,7 @@ def create_vector_db():
 
 
 if __name__ == "__main__":
-    # Ensure the legal_data_pdfs directory and dummy file exist for testing
+    # Create a dummy directory and file for demonstration if they don't exist
     dummy_dir = "./legal_data_pdfs"
     dummy_file = os.path.join(dummy_dir, "dummy_law.pdf")
     if not os.path.exists(dummy_dir):
@@ -212,4 +263,3 @@ if __name__ == "__main__":
 
     print("Starting vector database creation with LLM-generated tags...")
     create_vector_db()
-
