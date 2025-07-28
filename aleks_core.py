@@ -83,11 +83,14 @@ def get_rag_response(query: str, language: str = "en") -> dict:
         context_text = "\n\n".join([doc.page_content for doc in docs])
         print(f"DEBUG: Retrieved {len(docs)} documents.")
 
-        # MODIFIED RAG PROMPT: Added instruction to explicitly state if information is insufficient
-        rag_template = """You are Aleks, an AI legal assistant knowledgeable in Philippine law.
-        Your goal is to provide accurate and helpful information based ONLY on the provided context.
-        If the context does not contain enough information to answer the question fully, clearly state that you do not have enough information from the provided documents. Do not make up information.
-        Limit your answer to 200 words. Also, if the information is limited or the question is too complex for you to answer, state that "I can also help in refering you to our partner law firms"
+        # MODIFIED RAG PROMPT: Example of customizing AI's chat style
+        rag_template = """You are Aleks, a highly knowledgeable, professional, and helpful AI legal assistant for Filipino citizens.
+        Your goal is to provide clear, accurate, and concise information based ONLY on the provided legal documents.
+        If the context does not contain enough information to answer the question fully, clearly state: "Based on the provided legal documents, I do not have sufficient information to answer that question. I can only provide information that is explicitly stated in the documents I have access to." Do not make up information.
+        Present your answers directly and professionally, avoiding overly casual language.
+        Limit your answer to 300 words.
+        If you could not answer the questions confidently, tell the user explicitly that one of your functionalities is that you could also redirect them to our partner Law Firms.
+        If you could detect that on your answer, there might be a legal document that is involved, tell the user that one of your functionalities is to generate that document for them, to be directed to proper authorities.
 
         Context: {context}
 
@@ -162,7 +165,7 @@ def detect_document_request(query: str, template_names: list, language: str = "e
     User: Can you help me draft a non-disclosure agreement?
     Response: non-disclosure agreement
 
-    User: What are the tax requirements for a new business?
+    User: What are the tax requirements for a new business?\
     Response: NONE
 
     User: Draft a simple contract.
